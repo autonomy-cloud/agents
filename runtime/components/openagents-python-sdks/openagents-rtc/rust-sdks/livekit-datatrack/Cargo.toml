@@ -1,0 +1,34 @@
+[package]
+name = "livekit-datatrack"
+description = "Data track core for LiveKit"
+version = "0.1.13"
+readme = "README.md"
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+livekit-protocol = { workspace = true }
+livekit-runtime = { workspace = true, features = ["tokio"] }
+log = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, default-features = false, features = ["macros", "sync"] }
+futures-util = { workspace = true, default-features = false, features = ["sink"] }
+futures-core = { workspace = true }
+bytes = { workspace = true }
+from_variants = { workspace = true }
+tokio-stream = { workspace = true, features = ["sync"] }
+anyhow = { workspace = true } # For internal error handling only
+rand = { workspace = true }
+fake = { version = "4.4", features = ["derive"], optional = true }
+uniffi = { workspace = true, features = ["scaffolding-ffi-buffer-fns"], optional = true }
+indexmap = "2"
+
+[features]
+uniffi = ["dep:uniffi"]
+__fuzz = ["dep:fake"]
+
+[dev-dependencies]
+test-case = "3.3"
+fake = { version = "4.4", features = ["derive"] }
+tokio = { workspace = true, default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }

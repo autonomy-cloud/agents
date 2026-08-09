@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openagents-plugin-openai"
+dynamic = ["version"]
+description = "OpenAgents adapter for explicitly configured OpenAI-compatible endpoints"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10.0"
+authors = [{ name = "OpenAgents contributors" }]
+keywords = ["voice", "ai", "realtime", "audio", "video", "openai"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    "openagents-core[codecs, images]>=1.6.9",
+    # keywords/languages on the transcription APIs landed in 2.50
+    "openai[realtime]>=2.50",
+]
+
+
+[project.urls]
+Source = "https://github.com/autonomy-cloud/agents"
+
+[tool.hatch.version]
+path = "openagents/plugins/openai/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openagents"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/openagents"]
+
+[tool.uv]
+exclude-newer = "7 days"
+exclude-newer-package = { openagents-core = "0 days" }

@@ -1,0 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openagents-core"
+dynamic = ["version"]
+description = "A powerful framework for building realtime voice AI agents"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10,<3.15"
+authors = [{ name = "OpenAgents contributors" }]
+keywords = ["webrtc", "realtime", "audio", "video", "agents", "AI"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    "certifi>=2025.6.15",
+    "openagents-rtc==1.1.14",
+    "openagents-api>=1.2.0,<2",
+    "openagents-protocol>=1.1.21,<2",
+    "openagents-blingfire~=1.1,<2; python_version == '3.12' and sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "protobuf>=3",
+    "pyjwt>=2.0",
+    "types-protobuf>=4",
+    "psutil>=7.0",
+    "aiohttp~=3.10",
+    "typing-extensions>=4.12",
+    "docstring_parser>=0.16",
+    "eval-type-backport",
+    "colorama>=0.4.6",
+    "av>=14.0.0",
+    "numpy>=1.26.0",
+    "pydantic>=2.0,<3",
+    "opentelemetry-api>=1.39.0,<1.45",
+    "opentelemetry-sdk>=1.39.0,<1.45",
+    "prometheus-client>=0.22",
+    "aiofiles>=24",
+    "json-repair==0.60.1",
+    "pyyaml>=6.0.3",
+    # Required by the deprecated rich CLI (`cli.run_app`); drop when it is removed.
+    "typer>=0.15.1",
+    "click~=8.1",
+    "sounddevice>=0.5",
+    "watchfiles>=1.0",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.24.0, <2"]
+codecs = ["numpy>=1.26.0"]
+images = ["pillow>=10.3.0"]
+openai = ["openagents-plugin-openai>=1.6.9"]
+silero = ["openagents-plugin-silero>=1.6.9"]
+
+
+[project.urls]
+Source = "https://github.com/autonomy-cloud/agents"
+
+[tool.hatch.version]
+path = "openagents/agents/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openagents"]
+include = ["openagents/agents/resources/*", "openagents/agents/debug/index.html"]
+
+
+[tool.hatch.build.targets.sdist]
+include = ["/openagents"]
+
+[tool.uv]
+exclude-newer = "7 days"
+exclude-newer-package = { openagents-rtc = "0 days", openagents-api = "0 days", openagents-protocol = "0 days" }

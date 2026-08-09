@@ -1,0 +1,83 @@
+on:
+  push:
+    branches:
+      - "main"
+      - "release/**"
+  pull_request:
+
+name: Test Downstream
+
+jobs:
+  test-payjoin:
+    name: Test rust-payjoin Bindings
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Checkout rust-payjoin
+        uses: actions/checkout@v4
+        with:
+          repository: payjoin/rust-payjoin
+          path: rust-payjoin
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Use cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Patch uniffi-dart dependency
+        run: |
+          cat >> rust-payjoin/Cargo.toml << 'EOF'
+
+          [patch.'https://github.com/Uniffi-Dart/uniffi-dart.git']
+          uniffi-dart = { path = "../main" }
+          EOF
+
+      - name: Generate dart bindings and run tests
+        run: cd rust-payjoin/payjoin-ffi/dart && bash scripts/generate_bindings.sh && dart test
+
+  test-bdk:
+    name: Test bdk-dart Bindings
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Checkout bdk-dart
+        uses: actions/checkout@v4
+        with:
+          repository: bitcoindevkit/bdk-dart
+          path: bdk-dart
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Use cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Patch uniffi-dart dependency
+        run: |
+          cat >> bdk-dart/native/Cargo.toml << 'EOF'
+
+          [patch.'https://github.com/Uniffi-Dart/uniffi-dart']
+          uniffi-dart = { path = "../../main" }
+          EOF
+
+      - name: Generate dart bindings and run tests
+        run: cd bdk-dart && bash scripts/generate_bindings.sh && dart test

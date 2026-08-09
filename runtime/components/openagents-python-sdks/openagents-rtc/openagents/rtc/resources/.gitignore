@@ -1,0 +1,7 @@
+*.dylib
+!libopenagents_ffi.dylib
+*.so
+*.dll
+*.h
+!openagents_ffi.h
+LICENSE.md

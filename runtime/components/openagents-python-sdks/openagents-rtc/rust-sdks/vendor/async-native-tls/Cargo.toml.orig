@@ -1,0 +1,54 @@
+[package]
+name = "async-native-tls"
+version = "0.5.0"
+authors = ["dignifiedquire <me@dignifiedquire.com>"]
+edition = "2018"
+license = "MIT/Apache-2.0"
+repository = "https://github.com/async-email/async-native-tls"
+homepage = "https://docs.rs/crate/async-native-tls/"
+documentation = "https://docs.rs/crate/async-native-tls/"
+description = """
+Native TLS using futures
+"""
+readme = "README.md"
+categories = ["asynchronous", "cryptography", "network-programming"]
+
+
+[dependencies]
+native-tls = { version = "0.2.8", features = ["alpn"] }
+thiserror = "1.0.9"
+futures-util = { version = "0.3.1", features = ["io"], optional = true }
+tokio = { version = "1.0", default-features = false, features = ["io-util"], optional = true }
+url = "2.1.1"
+
+[features]
+default = ["runtime-async-std"]
+
+vendored = ["native-tls/vendored"]
+
+# Runtime
+runtime-async-std = ["futures-util"]
+runtime-tokio = ["tokio"]
+
+[dev-dependencies]
+env_logger = "0.9.0"
+async-std = { version = "1.6.0", features = ["attributes"] }
+tokio = { version = "1.0", features = ["full"] }
+cfg-if = "1.0.0"
+futures = "0.3.1"
+
+[[test]]
+name = "google"
+required-features = [ "runtime-async-std" ]
+
+[[test]]
+name = "google-tokio"
+required-features = [ "runtime-tokio" ]
+
+[[test]]
+name = "bad"
+required-features = [ "runtime-async-std" ]
+
+[[test]]
+name = "smoke"
+required-features = [ "runtime-async-std" ]

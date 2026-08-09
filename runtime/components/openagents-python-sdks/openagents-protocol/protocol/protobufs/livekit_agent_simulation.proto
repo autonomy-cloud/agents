@@ -1,0 +1,362 @@
+// Copyright 2024 LiveKit, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package livekit;
+
+import "agent/livekit_agent_session.proto";
+import "google/protobuf/timestamp.proto";
+import "livekit_cloud_agent.proto";
+import "livekit_models.proto";
+
+option csharp_namespace = "LiveKit.Proto";
+option go_package = "github.com/livekit/protocol/livekit";
+option ruby_package = "LiveKit::Proto";
+
+message SimulationRunSummary {
+  int32 passed = 1;
+  int32 failed = 2;
+  string going_well = 3;
+  string to_improve = 4;
+  repeated Issue issues = 5;
+  map<string, livekit.agent.ChatContext> chat_history = 6;
+
+  message Issue {
+    string description = 1;
+    string suggestion = 2;
+    string label = 3;
+  }
+}
+
+message SimulationRun {
+  enum Status {
+    STATUS_PENDING_UPLOAD = 0;
+    STATUS_GENERATING = 1;
+    STATUS_RUNNING = 2;
+    STATUS_SUMMARIZING = 3;
+    STATUS_COMPLETED = 4;
+    STATUS_FAILED = 5;
+    STATUS_CANCELLED = 6;
+  }
+
+  message Job {
+    enum Status {
+      STATUS_PENDING = 0;
+      STATUS_RUNNING = 1;
+      STATUS_COMPLETED = 2;
+      STATUS_FAILED = 3;
+      STATUS_CANCELLED = 4;
+    }
+    string id = 1;
+    Status status = 2;
+    string instructions = 3;
+    string error = 4;
+    string agent_expectations = 5;
+    string label = 6;
+    repeated string tags = 7;
+    string room_name = 8;
+    reserved 9;  // was scenario_id (scenarios are no longer stored)
+    google.protobuf.Timestamp started_at = 10;
+    google.protobuf.Timestamp ended_at = 11;
+    string room_id = 12;
+    Usage usage = 13;
+    // Quality metrics for this job's call. Unset when the job produced none.
+    JobMetrics metrics = 14;
+
+    message Usage {
+      int32 text_turns_count = 1;
+      int32 audio_turns_count = 2;
+    }
+  }
+
+  message JobMetrics {
+    // Headline scores, 0-1, computed by the worker as weighted means over the
+    // members that ran (a missing member renormalizes the rest):
+    //   accuracy   = task_completion x3 + stt.keyterm_recall + (1 - stt.wer) + tts.enunciation_score
+    //   experience = conversation.turn_taking_score x2 + tts.naturalness_score + llm.conciseness_score
+    optional float accuracy_score = 1;    // absent when the simulator spoiled the call
+    optional float experience_score = 2;  // absent when the simulator spoiled the call
+    // The accuracy anchor: the scenario verdict as 1/0, or the fraction of the declared target state the call reached.
+    optional float task_completion = 3;   // absent when the simulator spoiled the call
+
+    STT stt = 4;
+    LLM llm = 5;
+    TTS tts = 6;
+    Conversation conversation = 7;
+    Simulator simulator = 8;
+
+    // Conversation timeline: one entry per transcript turn, both speakers.
+    repeated Turn turns = 9;
+
+    string judge_model = 10;            // text judge for judged scores; "" if none ran
+    string audio_judge_model = 11;      // audio (LALM) judge; "" if none ran
+    bool has_remote_session = 12;       // false = waveform-only capture (e.g. SIP)
+    google.protobuf.Timestamp t0 = 13;  // audio only; call start (first speech edge); turn times relative to it
+
+    // The agent's perception of the caller. Audio only.
+    message STT {
+      optional float wer = 1;                       // needs the RemoteSession; word error rate, pooled: word_errors / words
+      optional uint32 words = 2;                    // needs the RemoteSession; pooling stats: run WER = sum errors / sum words
+      optional uint32 word_errors = 3;              // needs the RemoteSession
+      optional float cer = 4;                       // needs the RemoteSession; character error rate, pooled
+      optional uint32 chars = 9;                    // needs the RemoteSession
+      optional uint32 char_errors = 10;             // needs the RemoteSession
+      optional float keyterm_recall = 5;            // needs the RemoteSession; recall of uttered key entities (names, IDs, amounts)
+      optional uint32 keyterms_uttered = 6;         // needs the RemoteSession
+      optional uint32 keyterms_recognized = 7;      // needs the RemoteSession
+      optional uint32 transcription_latency_ms = 8; // needs the RemoteSession; agent-reported STT/endpointing delay, mean
+    }
+
+    message LLM {
+      optional uint32 ttft_ms = 1;            // needs the RemoteSession; time to first token, mean (per-turn in turns)
+      optional uint32 ttfs_ms = 2;            // needs the RemoteSession; time to first sentence (the smallest speakable unit)
+      optional float tokens_per_second = 3;   // needs the RemoteSession; decode rate, mean (per-turn in turns.llm)
+      optional float conciseness_score = 4;   // audio only; needs the audio judge; judged 0-1: brief enough for voice
+    }
+
+    // The agent's voice. audio only.
+    message TTS {
+      optional uint32 ttfa_ms = 1;             // needs the RemoteSession
+      optional uint32 ttfb_ms = 2;             // needs the RemoteSession; provider byte-level TTFB
+      optional float wer = 3;                  // needs the RemoteSession; word error rate, pooled: word_errors / words
+      optional uint32 words = 7;               // needs the RemoteSession
+      optional uint32 word_errors = 8;         // needs the RemoteSession
+      optional float cer = 9;                  // needs the RemoteSession; character error rate, pooled
+      optional uint32 chars = 10;              // needs the RemoteSession
+      optional uint32 char_errors = 11;        // needs the RemoteSession
+      optional float speech_rate_wpm = 4;      // speaking rate; conversational English ~110-150
+      optional uint32 heard_words = 12;        // pooling stats for speech_rate_wpm: raw heard words (not WER tokens)
+      optional uint32 speech_ms = 13;          // agent voiced time, sum of raw VAD segments
+      optional float naturalness_score = 5;    // needs the audio judge; judged 0-1: prosody / expressiveness
+      optional float enunciation_score = 6;    // needs the audio judge; judged 0-1: key entities audibly intact
+    }
+
+    // Audio only.
+    message Conversation {
+      optional float turn_taking_score = 1;              // 0-1: latency curve + cut-in/barge-in/missed-turn penalties
+      optional int32 response_latency_p50_ms = 2;        // floor-transfer offset; a gap is > 0, an overlap < 0
+      optional int32 response_latency_p95_ms = 3;
+      optional int32 response_latency_p99_ms = 4;
+      optional int32 response_latency_ms = 16;           // one turn's floor-transfer offset, cut-in if negative; job/run serve the percentiles
+      optional uint32 agent_yield_latency_ms = 5;        // agent audio continuing past a barge-in — per turn: on the barging persona row (presence = barge-in); job: mean
+      optional uint32 eot_misprediction_count = 6;       // agent started before the caller's turn ended; 0/1 per turn
+      optional float overlap_ratio = 7;                  // overlapping speech / total speech
+      optional uint32 overlap_speech_ms = 8;             // pooling stats for overlap_ratio
+      optional uint32 total_speech_ms = 9;
+      optional uint32 silence_total_ms = 10;             // dead air within the conversation
+      optional uint32 awkward_silence_count = 11;        // gaps past the natural-pause threshold; 0/1 per turn
+      optional uint32 unanswered_persona_turns = 12;             // the simulated party spoke, the agent never responded; 0/1 per turn
+      optional uint32 false_interruption_count = 13;             // needs the RemoteSession; agent paused for a non-interruption
+      optional uint32 false_interruption_unrecovered_count = 14; // needs the RemoteSession; of those, never resumed
+      optional uint32 agent_reported_e2e_latency_ms = 15;        // needs the RemoteSession; the agent's own claim, mean
+    }
+
+    // Was the call spoiled by the simulator, not the agent? Diagnostic only —
+    // never folded into the scores; run aggregation excludes flagged calls
+    // from the two headline scores.
+    message Simulator {
+      optional bool early_termination = 1;  // simulator ended a still-progressing call
+      optional bool late_termination = 2;   // simulator dragged on after the goal was met
+    }
+
+    // Rows exist for text and audio;
+    message Turn {
+      uint32 index = 1;                 // 1-based, conversation order
+      livekit.agent.ChatRole role = 2;  // ASSISTANT — the agent under test, USER — simulator persona.
+      optional uint32 start_ms = 3;     // audio only; relative to t0; unset if the turn could not be aligned to the audio
+      optional uint32 end_ms = 4;       // audio only
+
+      // Job groups hold means/pools of these; a field with no per-turn measurement stays unset here.
+      STT stt = 5;                      // transcription_latency_ms
+      LLM llm = 6;                      // ttft_ms, ttfs_ms, tokens_per_second, conciseness_score
+      TTS tts = 7;                      // ttfa_ms, ttfb_ms, naturalness_score, enunciation_score
+      Conversation conversation = 8;    // response_latency_ms, agent_yield_latency_ms, agent_reported_e2e_latency_ms, 0/1 counts
+    }
+  }
+
+  // Aggregates over this run's jobs. Reuses the JobMetrics group shapes.
+  message RunMetrics {
+    optional float accuracy_score = 1;     // mean over scored jobs
+    optional float experience_score = 2;
+    optional float scenario_pass_rate = 3; // share of jobs whose scenario verdict passed
+
+    JobMetrics.STT stt = 4;
+    JobMetrics.LLM llm = 5;
+    JobMetrics.TTS tts = 6;
+    JobMetrics.Conversation conversation = 7;
+
+    uint32 jobs_total = 9;
+    uint32 jobs_measured = 10;         // composites cover jobs_measured - jobs_simulator_fault
+    uint32 jobs_simulator_fault = 11;  // spoiled by the simulator: flagged, not scored
+  }
+
+  message Create {
+    message Request {
+      reserved 3;  // was agent_description (input never consumed; description is derived from source)
+      reserved "agent_description";
+      string project_id = 1;
+      string agent_name = 2;
+      int32 num_simulations = 4;
+      string region = 6;
+
+      // When set, run these scenarios (loaded from a scenarios.yaml).
+      // When unset, generate num_simulations scenarios from the uploaded agent source.
+      optional ScenarioGroup scenario_group = 7;
+
+      // Maximum simulate jobs running in parallel for this run. Clamped to the
+      // project's concurrency quota; 0/unset uses the server default.
+      optional int32 concurrency = 8;
+
+      // Conversation mode for every job in this run; unspecified = TEXT.
+      SimulationMode mode = 9;
+    }
+    message Response {
+      string simulation_run_id = 1;
+      PresignedPostRequest presigned_post_request = 2;
+    }
+  }
+
+  message ConfirmSourceUpload {
+    message Request {
+      string project_id = 1;
+      string simulation_run_id = 2;
+      string code_entrypoint = 3;
+    }
+    message Response {}
+  }
+
+  message Get {
+    message Request {
+      string project_id = 1;
+      string simulation_run_id = 2;
+    }
+    message Response {
+      SimulationRun run = 1;
+    }
+  }
+
+  message List {
+    message Request {
+      string project_id = 1;
+      optional Status status = 2;
+      optional TokenPagination page_token = 3;
+    }
+    message Response {
+      repeated SimulationRun runs = 1;
+      TokenPagination next_page_token = 2;
+    }
+  }
+
+  message Cancel {
+    message Request {
+      string project_id = 1;
+      string simulation_run_id = 2;
+    }
+    message Response {}
+  }
+
+  string id = 1;
+  string project_id = 2;
+  Status status = 3;
+  string agent_description = 4;
+  string error = 5;
+  google.protobuf.Timestamp created_at = 6;
+  repeated Job jobs = 7;
+  // was: SimulationRunSummary summary (replaced by summary_zstd)
+  reserved 8;
+  reserved "summary";
+  string agent_name = 9;
+  ScenarioGroup scenario_group = 10;
+  google.protobuf.Timestamp ended_at = 11;
+  int32 job_count = 12;
+  int32 passed_count = 13;
+  int32 failed_count = 14;
+  int32 num_simulations = 15;
+  // Aggregate usage across all jobs in this run (sum of Job.usage).
+  Usage usage = 16;
+  // Maximum simulate jobs running in parallel for this run (0 = server default).
+  int32 concurrency = 17;
+  // Conversation mode for every job in this run; unspecified = TEXT.
+  SimulationMode mode = 18;
+  // Run-level metric aggregates.
+  RunMetrics metrics = 19;
+
+  // zstd-compressed SimulationRunSummary: decompress, then proto.Unmarshal.
+  // Compressed by default so the blob ships as-is on every hop.
+  bytes summary_zstd = 20;
+
+  message Usage {
+    int32 text_turns_count = 1;
+    int32 audio_turns_count = 2;
+  }
+}
+
+// A single scenario, mirroring one entry in a scenarios.yaml file. Scenarios
+// are no longer stored server-side; the yaml file is the source of truth.
+message Scenario {
+  message CreateFromSession {
+    message Request {
+      string project_id = 1;
+      string room_id = 2;
+      string region = 3;
+    }
+    message Response {
+      Scenario scenario = 1;
+    }
+  }
+
+  string label = 1;
+  string instructions = 2;
+  string agent_expectations = 3;
+  // Set as participant attributes on the simulation participant's access token.
+  map<string, string> tags = 4;
+  // Arbitrary JSON-encoded object, surfaced to the agent under test as
+  // SimulationContext userdata (e.g. inputs and benchmark target state).
+  string userdata = 5;
+}
+
+// A named group of scenarios, mirroring a whole scenarios.yaml file.
+message ScenarioGroup {
+  string name = 1;
+  repeated Scenario scenarios = 2;
+}
+
+// How the simulated user interacts with the agent under test.
+enum SimulationMode {
+  SIMULATION_MODE_UNSPECIFIED = 0;
+  // The simulator chats over text streams (no audio).
+  SIMULATION_MODE_TEXT = 1;
+  // The simulator publishes/subscribes audio in the room.
+  SIMULATION_MODE_AUDIO = 2;
+}
+
+// Carried (protojson-encoded) in the simulation room's metadata so the agent
+// under test can read the scenario + run identity synchronously at connect.
+message SimulationDispatch {
+  string simulation_run_id = 1;
+  string job_id = 2;
+  Scenario scenario = 3;
+  SimulationMode mode = 4;
+}
+
+service AgentSimulation {
+  rpc CreateSimulationRun(SimulationRun.Create.Request) returns (SimulationRun.Create.Response);
+  rpc ConfirmSimulationSourceUpload(SimulationRun.ConfirmSourceUpload.Request) returns (SimulationRun.ConfirmSourceUpload.Response);
+  rpc GetSimulationRun(SimulationRun.Get.Request) returns (SimulationRun.Get.Response);
+  rpc ListSimulationRuns(SimulationRun.List.Request) returns (SimulationRun.List.Response);
+  rpc CancelSimulationRun(SimulationRun.Cancel.Request) returns (SimulationRun.Cancel.Response);
+
+  rpc CreateScenarioFromSession(Scenario.CreateFromSession.Request) returns (Scenario.CreateFromSession.Response);
+}

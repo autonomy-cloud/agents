@@ -1,0 +1,70 @@
+on:
+  push:
+    branches:
+      - "main"
+      - "release/**"
+  pull_request:
+
+name: Testing
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - "1.85"
+          - nightly
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Use cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cargo-nextest
+
+      - name: Install Dart toolchain
+        uses: dart-lang/setup-dart@v1
+
+      - name: Run cargo nextest
+        continue-on-error: ${{ matrix.rust == 'nightly' }}
+        run: cargo nextest run --all
+
+  lints:
+    name: Lints
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - "1.85"
+          - nightly
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy rustfmt
+
+      - name: Use cache
+        uses: Swatinem/rust-cache@v2
+          
+      - name: Format
+        continue-on-error: ${{ matrix.rust == 'nightly' }}
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        continue-on-error: ${{ matrix.rust == 'nightly' }}
+        run: cargo clippy -- -D warnings

@@ -1,0 +1,166 @@
+from __future__ import annotations
+
+import aiohttp
+from typing import Optional
+
+from openagents.protocol.connector_whatsapp import (
+    DialWhatsAppCallRequest,
+    DialWhatsAppCallResponse,
+    DisconnectWhatsAppCallRequest,
+    DisconnectWhatsAppCallResponse,
+    ConnectWhatsAppCallRequest,
+    ConnectWhatsAppCallResponse,
+    AcceptWhatsAppCallRequest,
+    AcceptWhatsAppCallResponse,
+)
+from openagents.protocol.connector_twilio import (
+    ConnectTwilioCallRequest,
+    ConnectTwilioCallResponse,
+)
+from ._service import Service
+from ._dial_timeout import DEFAULT_RINGING_TIMEOUT
+from .access_token import VideoGrants
+
+SVC = "Connector"
+"""@private"""
+
+
+class ConnectorService(Service):
+    """Client for LiveKit Connector Service API
+
+    Recommended way to use this service is via `openagents.api.OpenAgentsAPI`:
+
+    ```python
+    from openagents import api
+    lkapi = api.OpenAgentsAPI()
+    connector_service = lkapi.connector
+    ```
+    """
+
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        api_key: str,
+        api_secret: str,
+        failover: bool = True,
+    ):
+        super().__init__(session, url, api_key, api_secret, failover=failover)
+
+    async def dial_whatsapp_call(
+        self, request: DialWhatsAppCallRequest
+    ) -> DialWhatsAppCallResponse:
+        """
+        Initiate an outbound WhatsApp call
+
+        Args:
+            request: DialWhatsAppCallRequest containing call parameters
+
+        Returns:
+            DialWhatsAppCallResponse with the WhatsApp call ID and room name
+        """
+        return await self._client.request(
+            SVC,
+            "DialWhatsAppCall",
+            request,
+            self._auth_header(VideoGrants(room_create=True)),
+            DialWhatsAppCallResponse,
+        )
+
+    async def disconnect_whatsapp_call(
+        self, request: DisconnectWhatsAppCallRequest
+    ) -> DisconnectWhatsAppCallResponse:
+        """
+        Disconnect an active WhatsApp call
+
+        Args:
+            request: DisconnectWhatsAppCallRequest containing the call ID to disconnect
+
+        Returns:
+            DisconnectWhatsAppCallResponse (empty response)
+        """
+        return await self._client.request(
+            SVC,
+            "DisconnectWhatsAppCall",
+            request,
+            self._auth_header(VideoGrants(room_create=True)),
+            DisconnectWhatsAppCallResponse,
+        )
+
+    async def connect_whatsapp_call(
+        self, request: ConnectWhatsAppCallRequest
+    ) -> ConnectWhatsAppCallResponse:
+        """
+        Connect a WhatsApp call with SDP information
+
+        Args:
+            request: ConnectWhatsAppCallRequest containing call ID and SDP
+
+        Returns:
+            ConnectWhatsAppCallResponse (empty response)
+        """
+        return await self._client.request(
+            SVC,
+            "ConnectWhatsAppCall",
+            request,
+            self._auth_header(VideoGrants(room_create=True)),
+            ConnectWhatsAppCallResponse,
+        )
+
+    async def accept_whatsapp_call(
+        self,
+        request: AcceptWhatsAppCallRequest,
+        *,
+        timeout: Optional[float] = None,
+    ) -> AcceptWhatsAppCallResponse:
+        """
+        Accept an inbound WhatsApp call
+
+        Args:
+            request: AcceptWhatsAppCallRequest containing call parameters and SDP
+            timeout: Optional request timeout in seconds. When the request waits
+                for the inbound party to join (wait_until_answered), it defaults
+                to the standard ring window.
+
+        Returns:
+            AcceptWhatsAppCallResponse with the room name
+        """
+        client_timeout: Optional[aiohttp.ClientTimeout] = None
+        if request.wait_until_answered:
+            # Waiting for the inbound party to join can block, so default the
+            # request timeout to the standard ring window; the caller overrides
+            # via timeout.
+            client_timeout = aiohttp.ClientTimeout(
+                total=timeout if timeout else DEFAULT_RINGING_TIMEOUT
+            )
+        elif timeout:
+            client_timeout = aiohttp.ClientTimeout(total=timeout)
+
+        return await self._client.request(
+            SVC,
+            "AcceptWhatsAppCall",
+            request,
+            self._auth_header(VideoGrants(room_create=True)),
+            AcceptWhatsAppCallResponse,
+            timeout=client_timeout,
+        )
+
+    async def connect_twilio_call(
+        self, request: ConnectTwilioCallRequest
+    ) -> ConnectTwilioCallResponse:
+        """
+        Connect a Twilio call to a LiveKit room
+
+        Args:
+            request: ConnectTwilioCallRequest containing call parameters
+
+        Returns:
+            ConnectTwilioCallResponse with the websocket URL for Twilio media stream
+        """
+        return await self._client.request(
+            SVC,
+            "ConnectTwilioCall",
+            request,
+            self._auth_header(VideoGrants(room_create=True)),
+            ConnectTwilioCallResponse,
+        )

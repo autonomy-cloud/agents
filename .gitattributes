@@ -1,0 +1,7 @@
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+runtime/vendor/libwebrtc/*.zip filter=lfs diff=lfs merge=lfs -text
+runtime/vendor/python/wheels/*.whl filter=lfs diff=lfs merge=lfs -text
+runtime/python/openagents/bin/openagents-server filter=lfs diff=lfs merge=lfs -text
+runtime/components/openagents-python-sdks/openagents-rtc/**/libopenagents_ffi.* filter=lfs diff=lfs merge=lfs -text
+openagents-plugins/silero/**/*.onnx filter=lfs diff=lfs merge=lfs -text

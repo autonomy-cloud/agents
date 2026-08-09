@@ -1,0 +1,4 @@
+# Configure extra Mach-O header padding on macOS so that
+# Dart's bundler can safely rewrite install names for native assets.
+[target.'cfg(target_os = "macos")']
+rustflags = ["-C", "link-args=-Wl,-headerpad_max_install_names"]

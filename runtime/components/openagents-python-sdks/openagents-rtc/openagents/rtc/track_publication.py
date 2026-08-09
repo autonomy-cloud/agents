@@ -1,0 +1,145 @@
+# Copyright 2023 LiveKit, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from typing import List, Optional, cast
+import asyncio
+
+from ._ffi_client import FfiHandle, FfiClient
+from ._proto import e2ee_pb2 as proto_e2ee
+from ._proto import ffi_pb2 as proto_ffi
+from ._proto import track_pb2 as proto_track
+from ._proto import track_publication_pb2 as proto_track_pub
+from .track import Track, LocalTrack, RemoteTrack
+
+VideoQuality = proto_track_pub.VideoQuality
+
+
+class TrackPublication:
+    def __init__(self, owned_info: proto_track.OwnedTrackPublication):
+        self._info = owned_info.info
+        self._track: Optional[Track] = None
+        self._ffi_handle = FfiHandle(owned_info.handle.id)
+
+    @property
+    def track(self) -> Optional[Track]:
+        return self._track
+
+    @property
+    def sid(self) -> str:
+        return self._info.sid
+
+    @property
+    def name(self) -> str:
+        return self._info.name
+
+    @property
+    def kind(self) -> proto_track.TrackKind.ValueType:
+        return self._info.kind
+
+    @property
+    def source(self) -> proto_track.TrackSource.ValueType:
+        return self._info.source
+
+    @property
+    def simulcasted(self) -> bool:
+        return self._info.simulcasted
+
+    @property
+    def width(self) -> int:
+        return self._info.width
+
+    @property
+    def height(self) -> int:
+        return self._info.height
+
+    @property
+    def mime_type(self) -> str:
+        return self._info.mime_type
+
+    @property
+    def muted(self) -> bool:
+        return self._info.muted
+
+    @property
+    def encryption_type(self) -> proto_e2ee.EncryptionType.ValueType:
+        return self._info.encryption_type
+
+    @property
+    def audio_features(self) -> List[proto_track.AudioTrackFeature.ValueType]:
+        return list(self._info.audio_features)
+
+    @property
+    def frame_metadata_features(self) -> List[proto_track.FrameMetadataFeature.ValueType]:
+        return list(self._info.frame_metadata_features)
+
+
+class LocalTrackPublication(TrackPublication):
+    def __init__(self, owned_info: proto_track.OwnedTrackPublication):
+        super().__init__(owned_info)
+        self._first_subscription: asyncio.Future[None] = asyncio.Future()
+
+    @property
+    def track(self) -> Optional[LocalTrack]:
+        return cast(Optional[LocalTrack], self._track)
+
+    async def wait_for_subscription(self) -> None:
+        await asyncio.shield(self._first_subscription)
+
+    def __repr__(self) -> str:
+        return f"rtc.LocalTrackPublication(sid={self.sid}, name={self.name}, kind={self.kind}, source={self.source})"
+
+
+class RemoteTrackPublication(TrackPublication):
+    def __init__(self, owned_info: proto_track.OwnedTrackPublication):
+        super().__init__(owned_info)
+        self._subscribed = False
+
+    @property
+    def track(self) -> Optional[RemoteTrack]:
+        return cast(Optional[RemoteTrack], self._track)
+
+    @property
+    def subscribed(self) -> bool:
+        return self._subscribed
+
+    def set_subscribed(self, subscribed: bool) -> None:
+        req = proto_ffi.FfiRequest()
+        req.set_subscribed.subscribe = subscribed
+        req.set_subscribed.publication_handle = self._ffi_handle.handle
+        FfiClient.instance.request(req)
+
+    def set_video_quality(self, quality: "VideoQuality.ValueType") -> None:
+        """For simulcasted video tracks, request a specific simulcast layer
+        from the server. Use one of `rtc.VideoQuality.VIDEO_QUALITY_LOW` (q),
+        `VIDEO_QUALITY_MEDIUM` (h), or `VIDEO_QUALITY_HIGH` (f).
+
+        Raises:
+            ValueError: if the publication is not a video track, or is not
+                simulcasted (selecting a layer requires multiple layers).
+        """
+        if self.kind != proto_track.TrackKind.KIND_VIDEO:
+            raise ValueError(
+                f"set_video_quality is only supported on video publications (sid={self.sid})"
+            )
+        if not self.simulcasted:
+            raise ValueError(
+                f"set_video_quality requires a simulcasted publication (sid={self.sid})"
+            )
+        req = proto_ffi.FfiRequest()
+        req.set_remote_track_publication_quality.track_publication_handle = self._ffi_handle.handle
+        req.set_remote_track_publication_quality.quality = quality
+        FfiClient.instance.request(req)
+
+    def __repr__(self) -> str:
+        return f"rtc.RemoteTrackPublication(sid={self.sid}, name={self.name}, kind={self.kind}, source={self.source})"

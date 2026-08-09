@@ -1,0 +1,32 @@
+[package]
+name = "smawk"
+version = "0.3.3"
+authors = ["Martin Geisler <martin@geisler.net>"]
+categories = ["algorithms", "mathematics", "science"]
+edition = "2024"
+exclude = [".github/", ".gitignore", "benches/", "examples/"]
+keywords = ["smawk", "matrix", "optimization", "dynamic-programming"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/mgeisler/smawk"
+description = "Functions for finding row-minima in a totally monotone matrix."
+
+[dependencies]
+ndarray = { version = "0.17.1", optional = true, default-features = false }
+
+[dev-dependencies]
+divan = "0.1.21"
+num-traits = "0.2.14"
+rand = "0.10.1"
+rstest = "0.26.1"
+version-sync = "0.9.4"
+
+[[bench]]
+name = "comparison"
+harness = false
+required-features = ["ndarray"]
+
+[[bench]]
+name = "online"
+harness = false
+required-features = ["ndarray"]

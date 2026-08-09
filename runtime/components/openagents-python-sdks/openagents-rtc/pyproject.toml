@@ -1,0 +1,74 @@
+[build-system]
+requires = [
+    "setuptools>=61",
+    "wheel",
+    "requests",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openagents-rtc"
+dynamic = ["version"]
+description = "OpenAgents Python realtime transport SDK"
+readme = "README.md"
+requires-python = ">=3.9.0"
+license = "Apache-2.0"
+keywords = ["webrtc", "realtime", "audio", "video", "openagents"]
+authors = [
+    { name = "OpenAgents contributors" }
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    "protobuf>=5",
+    "types-protobuf>=5",
+    "aiofiles>=24",
+    "numpy>=1.26",
+]
+
+[project.urls]
+Source = "https://github.com/autonomy-cloud/agents"
+
+[tool.setuptools.dynamic]
+version = { attr = "openagents.rtc.version.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["openagents.*"]
+
+[tool.setuptools.package-data]
+"openagents.rtc" = ["_proto/*.py", "py.typed", "*.pyi", "**/*.pyi"]
+"openagents.rtc.resources" = [
+    "*.so",
+    "*.dylib",
+    "*.dll",
+    "LICENSE.md",
+    "*.h",
+    "jupyter-html/index.html",
+]
+
+[tool.cibuildwheel]
+build = "cp39-*"
+skip = "*-musllinux_*"  # not supported (libwebrtc requires glibc)
+before-build = "python ensure_local_ffi.py"
+
+# macOS deployment targets must match the FFI binaries (see rust-sdks/.github/workflows/ffi-builds.yml)
+# x86_64 supports macOS 10.15+, arm64 requires macOS 11.0+
+[[tool.cibuildwheel.overrides]]
+select = "*macosx_x86_64"
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
+
+[[tool.cibuildwheel.overrides]]
+select = "*macosx_arm64"
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
