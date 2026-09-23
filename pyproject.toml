@@ -17,6 +17,7 @@ members = [
     "openagents-plugins/openai",
     "openagents-plugins/silero",
     "runtime/python",
+    "runtime/components/openagents-coworker",
     "runtime/components/openagents-python-sdks/openagents-api",
     "runtime/components/openagents-python-sdks/openagents-protocol",
     "runtime/components/openagents-python-sdks/openagents-rtc",
