@@ -4,6 +4,7 @@ and converse naturally."""
 from __future__ import annotations
 
 from openagents.agents import Agent
+from openagents.agents.llm import Toolset
 
 INSTRUCTIONS = """\
 You are Anika, a helpful AI coworker who joins meetings alongside your human
@@ -28,5 +29,5 @@ scheduling something) that you do not actually have a tool for.
 class Anika(Agent):
     """The default Anika coworker agent."""
 
-    def __init__(self) -> None:
-        super().__init__(id="anika", instructions=INSTRUCTIONS)
+    def __init__(self, *, tools: list[Toolset] | None = None) -> None:
+        super().__init__(id="anika", instructions=INSTRUCTIONS, tools=tools or [])

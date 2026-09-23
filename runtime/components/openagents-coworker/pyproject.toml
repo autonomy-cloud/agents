@@ -12,7 +12,7 @@ license = "Apache-2.0"
 keywords = ["voice", "ai", "agent", "coworker", "realtime"]
 authors = [{ name = "OpenAgents contributors" }]
 dependencies = [
-    "openagents-core>=1.6.9",
+    "openagents-core[mcp]>=1.6.9",
     "openagents-plugin-openai>=1.6.9",
     "openagents-plugin-silero>=1.6.9",
 ]
