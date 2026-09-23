@@ -20,6 +20,7 @@ import {
 } from "@/components/playground/PlaygroundTile";
 import { useRemoteSession } from "@/hooks/useRemoteSession";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useConfig } from "@/hooks/useConfig";
 import { useUplinkLatency } from "@/hooks/useUplinkLatency";
 import { AttributeItem } from "@/lib/types";
@@ -43,7 +44,7 @@ import {
 } from "livekit-client";
 import { RoomAgentDispatch } from "livekit-server-sdk";
 import { QRCodeSVG } from "qrcode.react";
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import tailwindTheme from "../../lib/tailwindTheme.preval";
 import type { RoomSummary } from "@/pages/api/rooms";
 import type { AgentSummary } from "@/pages/api/agents";
@@ -536,6 +537,26 @@ export default function Playground({
       ),
     [messages.messages],
   );
+
+  // Output-side mirror of the browser-STT mic: the agent's reply text
+  // arrives via openagents-core's transcription stream regardless of
+  // whether it has real TTS audio, so speak it with the browser's own
+  // SpeechSynthesis when the agent has no real published audio track —
+  // giving it a voice today with no TTS model/endpoint required. Stops
+  // automatically once real agent audio exists (agent.microphoneTrack),
+  // so the two never talk over each other.
+  const speechSynthesis = useSpeechSynthesis();
+  const spokenAgentMessageIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (agent.microphoneTrack) return; // real TTS audio exists — don't duplicate it
+    for (const m of transcriptMessages) {
+      if (m.type !== "agentTranscript") continue;
+      const id = m.id ?? m.message;
+      if (spokenAgentMessageIds.current.has(id)) continue;
+      spokenAgentMessageIds.current.add(id);
+      speechSynthesis.speak(m.message);
+    }
+  }, [transcriptMessages, agent.microphoneTrack, speechSynthesis]);
 
   const chatTileContent = useMemo(() => {
     if (agent.isConnected) {
