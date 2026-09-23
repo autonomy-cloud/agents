@@ -19,6 +19,7 @@ import {
   PlaygroundTile,
 } from "@/components/playground/PlaygroundTile";
 import { useRemoteSession } from "@/hooks/useRemoteSession";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useConfig } from "@/hooks/useConfig";
 import { useUplinkLatency } from "@/hooks/useUplinkLatency";
 import { AttributeItem } from "@/lib/types";
@@ -246,6 +247,36 @@ export default function Playground({
     session.room.localParticipant,
     connectionState,
   ]);
+
+  // One mic, not two: rather than a separate "voice input" control, browser
+  // speech recognition rides along with the *same* microphone toggle this
+  // console already has. Real published audio still goes out over WebRTC
+  // as always (for whenever a real STT model is configured); meanwhile,
+  // for as long as that mic is actually on, the browser also transcribes
+  // it locally and sends the result as a text message — reaching the
+  // agent's text-input path (openagents-core room_io's TOPIC_CHAT handler)
+  // without needing any STT model/endpoint. Once a real endpoint exists,
+  // both paths just work side by side; nothing to switch off.
+  const speech = useSpeechRecognition({
+    onFinalResult: (text) => {
+      void messages.send(text);
+    },
+  });
+
+  useEffect(() => {
+    const micOn =
+      connectionState === ConnectionState.Connected &&
+      !!session.local.microphoneTrack &&
+      !session.local.microphoneTrack.publication?.isMuted;
+    if (micOn) {
+      speech.start();
+    } else {
+      speech.stop();
+    }
+    // speech.start/stop are stable across renders (useCallback with fixed
+    // deps), so this only needs to react to the mic's actual on/off state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionState, session.local.microphoneTrack, session.local.microphoneTrack?.publication?.isMuted]);
 
   useEffect(() => {
     if (connectionState === ConnectionState.Disconnected) {
