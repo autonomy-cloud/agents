@@ -1,0 +1,7 @@
+<svg width="164" height="32" viewBox="0 0 164 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="2" y="2" width="12" height="12" rx="2" fill="currentColor"/>
+<rect x="18" y="2" width="12" height="12" rx="2" fill="currentColor" fill-opacity="0.5"/>
+<rect x="2" y="18" width="12" height="12" rx="2" fill="currentColor" fill-opacity="0.5"/>
+<rect x="18" y="18" width="12" height="12" rx="2" fill="currentColor"/>
+<text x="40" y="22" font-family="Helvetica, Arial, sans-serif" font-size="16" font-weight="600" fill="white" fill-opacity="0.85">Coworker Console</text>
+</svg>

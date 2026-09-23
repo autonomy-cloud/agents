@@ -13,6 +13,7 @@ must not download components or model files.
 | Nested Rust protocol | `28e604c046c6aec29757cabed341b86458cc40f9` | Rust protocol sources |
 | libyuv | `917276084a49be726c90292ff0a6b0a3d571a6af` | Native YUV processing |
 | libwebrtc | `webrtc-51ef663` | Pinned native WebRTC archive/build input |
+| Console UI baseline (agents-playground, Apache-2.0) | `2a2d1dbe3317100366bc86f53f253b59394dca3c` | Rebranded/redesigned web console, absorbed into `openagents-console` — see `openagents-console/ABSORBED.md` |
 
 Apache-2.0 license and notice files from each upstream component are preserved
 inside its component directory. A release build must also generate an SBOM and
