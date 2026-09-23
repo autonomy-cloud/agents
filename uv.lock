@@ -13,6 +13,7 @@ resolution-markers = [
 members = [
     "openagents-api",
     "openagents-core",
+    "openagents-coworker",
     "openagents-plugin-openai",
     "openagents-plugin-silero",
     "openagents-protocol",
@@ -1260,6 +1261,23 @@ requires-dist = [
     { name = "watchfiles", specifier = ">=1.0" },
 ]
 provides-extras = ["codecs", "images", "mcp", "openai", "silero"]
+
+[[package]]
+name = "openagents-coworker"
+version = "0.1.0"
+source = { editable = "runtime/components/openagents-coworker" }
+dependencies = [
+    { name = "openagents-core" },
+    { name = "openagents-plugin-openai" },
+    { name = "openagents-plugin-silero" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "openagents-core", editable = "openagents-core" },
+    { name = "openagents-plugin-openai", editable = "openagents-plugins/openai" },
+    { name = "openagents-plugin-silero", editable = "openagents-plugins/silero" },
+]
 
 [[package]]
 name = "openagents-plugin-openai"

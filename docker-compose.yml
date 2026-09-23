@@ -1,0 +1,36 @@
+# Local dev stack for the auxiliary coworker services (workstation, and
+# eventually the coworker agent) — NOT openagents-server itself.
+#
+# openagents-server runs natively (see scripts/dev-up.sh), not in this
+# compose file: a single "--dev" instance needs to advertise one
+# --node-ip that's reachable by both the host browser (openagents-console)
+# and any sibling containers, and those are two different addresses when
+# the server itself is containerized (127.0.0.1 after port-publishing vs.
+# a Docker-internal address). Running it natively sidesteps that split
+# entirely — host clients reach it at 127.0.0.1, and containers already
+# reach a host-run server at host.docker.internal (verified working).
+#
+# Usage: ./scripts/dev-up.sh (starts the server, then this compose stack)
+#        or `docker compose up` directly once the server is already running.
+
+services:
+  workstation:
+    build:
+      context: ./runtime/components/openagents-workstation
+    environment:
+      OPENAGENTS_URL: ${OPENAGENTS_URL:-ws://host.docker.internal:7880}
+      OPENAGENTS_API_KEY: ${OPENAGENTS_API_KEY:-devkey}
+      OPENAGENTS_API_SECRET: ${OPENAGENTS_API_SECRET:-secret}
+      ROOM_NAME: ${ROOM_NAME:-coworker-standup}
+      COWORKER_IDENTITY: ${COWORKER_IDENTITY:-anika-coworker}
+    extra_hosts:
+      # host.docker.internal is automatic on Docker Desktop (macOS/Windows);
+      # this makes it resolve on Linux Docker too.
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+# openagents-coworker (runtime/components/openagents-coworker) is a plain
+# Python component with no system-package dependencies (unlike
+# workstation's Xvnc/xdotool/ffmpeg) — it runs natively via `uv run`, not
+# in this compose file. See scripts/dev-up.sh, which starts it alongside
+# the server and this compose stack.

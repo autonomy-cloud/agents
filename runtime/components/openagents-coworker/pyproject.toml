@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openagents-coworker"
+version = "0.1.0"
+description = "Anika: the OpenAgents digital coworker voice worker (VAD -> STT -> LLM -> TTS)"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+license = "Apache-2.0"
+keywords = ["voice", "ai", "agent", "coworker", "realtime"]
+authors = [{ name = "OpenAgents contributors" }]
+dependencies = [
+    "openagents-core>=1.6.9",
+    "openagents-plugin-openai>=1.6.9",
+    "openagents-plugin-silero>=1.6.9",
+]
+
+[project.urls]
+Source = "https://github.com/autonomy-cloud/agents"
+
+[project.scripts]
+openagents-coworker = "openagents_coworker.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openagents_coworker"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/openagents_coworker", "/README.md"]
