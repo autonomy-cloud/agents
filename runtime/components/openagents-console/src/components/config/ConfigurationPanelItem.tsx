@@ -22,14 +22,14 @@ export const ConfigurationPanelItem: React.FC<ConfigurationPanelItemProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
 
   return (
-    <div className="w-full text-gray-300 py-4 border-b border-b-white/[0.06] relative">
-      <div className="flex flex-row justify-between items-center px-4 text-sm font-medium text-gray-200">
+    <div className="w-full text-gray-600 dark:text-gray-300 py-4 border-b border-b-gray-200 dark:border-b-white/[0.06] relative">
+      <div className="flex flex-row justify-between items-center px-4 text-sm font-medium text-gray-700 dark:text-gray-200">
         <h3>{title}</h3>
         <div className="flex items-center gap-2">
           {source && (
             <span className="flex flex-row gap-2">
               <TrackToggle
-                className="px-2.5 py-1 bg-surface-2 text-gray-300 border border-white/10 rounded-lg hover:bg-surface-3 transition-colors"
+                className="px-2.5 py-1 bg-gray-100 dark:bg-surface-2 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-white/10 rounded-lg hover:bg-gray-200 dark:hover:bg-surface-3 transition-colors"
                 source={source}
               />
               {source === Track.Source.Camera && (
@@ -43,7 +43,7 @@ export const ConfigurationPanelItem: React.FC<ConfigurationPanelItemProps> = ({
           {collapsible && (
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="text-gray-400 hover:text-gray-300 transition-colors"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
               <svg
                 className={`w-4 h-4 transform transition-transform ${!isCollapsed ? "rotate-180" : ""}`}
@@ -63,7 +63,7 @@ export const ConfigurationPanelItem: React.FC<ConfigurationPanelItemProps> = ({
         </div>
       </div>
       {!isCollapsed && (
-        <div className="px-4 py-2 text-xs text-gray-500 leading-normal">
+        <div className="px-4 py-2 text-xs text-gray-600 dark:text-gray-500 leading-normal">
           {children}
         </div>
       )}

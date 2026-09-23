@@ -5,7 +5,32 @@
 :root {
   /* Debug panel theme — softened to match the app's card-based surface
      palette (see surface.* in tailwind.config.js) instead of a flat
-     terminal look, while staying dim enough for a debug tool. */
+     terminal look. Light-mode values live here as the default; `.dark`
+     below overrides them with the original dim, dev-tool-adjacent palette.
+     This mirrors Tailwind's class-based dark: convention even though the
+     debug panel's own `--lk-dbg-*` variables aren't Tailwind utilities. */
+  --lk-dbg-bg: #ffffff;
+  --lk-dbg-bg2: #f7f7f8;
+  --lk-dbg-bg3: #eeeef0;
+  --lk-dbg-bg4: #e4e4e8;
+  --lk-dbg-bg5: #d4d4da;
+  --lk-dbg-fg: #17171a;
+  --lk-dbg-fg3: #45454e;
+  --lk-dbg-fg5: #6b6b76;
+  --lk-dbg-border: rgba(0, 0, 0, 0.09);
+  --lk-dbg-radius: 0.75rem;
+  --lk-dbg-control-bg: #f2f2f4;
+  --lk-dbg-control-hover: #e6e6ea;
+  --lk-dbg-fg4: #9a9aa4;
+
+  --page-bg: #f8fafc;
+  --scrollbar-track: rgba(0, 0, 0, 0.05);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+  --repeating-square-glow: rgba(8, 145, 178, 0.05);
+}
+
+.dark {
   --lk-dbg-bg: #0d0d10;
   --lk-dbg-bg2: #16161a;
   --lk-dbg-bg3: #1e1e24;
@@ -19,6 +44,12 @@
   --lk-dbg-control-bg: #18181d;
   --lk-dbg-control-hover: #232329;
   --lk-dbg-fg4: #5a5a63;
+
+  --page-bg: #0a0a0c;
+  --scrollbar-track: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-hover: #555;
+  --repeating-square-glow: rgba(34, 211, 238, 0.06);
 }
 
 .lk-dbg-thin-scroll {
@@ -42,7 +73,7 @@
 }
 
 body {
-  background: #0a0a0c;
+  background: var(--page-bg);
   --lk-va-bar-gap: 4px;
   --lk-va-bar-width: 4px;
   --lk-va-border-radius: 3px;
@@ -59,7 +90,17 @@ body {
   background-image:
     radial-gradient(
       ellipse 80% 60% at 50% -10%,
-      rgba(34, 211, 238, 0.06),
+      var(--repeating-square-glow),
+      transparent 60%
+    ),
+    url("data:image/svg+xml,%3Csvg width='18' height='18' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0' y='0' width='2' height='2' fill='rgba(0, 0, 0, 0.035)' /%3E%3C/svg%3E");
+}
+
+.dark .repeating-square-background {
+  background-image:
+    radial-gradient(
+      ellipse 80% 60% at 50% -10%,
+      var(--repeating-square-glow),
       transparent 60%
     ),
     url("data:image/svg+xml,%3Csvg width='18' height='18' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0' y='0' width='2' height='2' fill='rgba(255, 255, 255, 0.025)' /%3E%3C/svg%3E");
@@ -70,17 +111,17 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--scrollbar-track);
   border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--scrollbar-thumb);
   border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--scrollbar-thumb-hover);
 }
 
 ::-webkit-scrollbar {

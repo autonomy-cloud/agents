@@ -175,10 +175,10 @@ export const AttributesInspector: React.FC<AttributesInspectorProps> = ({
         className="flex items-center justify-between mb-2 cursor-pointer"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="text-sm text-gray-500">Attributes</div>
+        <div className="text-sm text-gray-600 dark:text-gray-500">Attributes</div>
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className={`h-4 w-4 text-gray-500 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+          className={`h-4 w-4 text-gray-600 dark:text-gray-500 transition-transform ${isExpanded ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -192,10 +192,10 @@ export const AttributesInspector: React.FC<AttributesInspectorProps> = ({
         </svg>
       </div>
       {isExpanded && (
-        <div className="border border-white/10 rounded-xl bg-surface-2/50 p-3 mb-2">
+        <div className="border border-gray-200 dark:border-white/10 rounded-xl bg-gray-100/70 dark:bg-surface-2/50 p-3 mb-2">
           {disabled ? (
             localAttributes.length === 0 ? (
-              <div className="text-sm text-gray-400 font-sans">
+              <div className="text-sm text-gray-500 dark:text-gray-400 font-sans">
                 No attributes set
               </div>
             ) : (
@@ -245,7 +245,7 @@ export const AttributesInspector: React.FC<AttributesInspectorProps> = ({
                   Attribute
                 </Button>
                 {showSyncFlash && (
-                  <div className="text-xs text-gray-400 animate-fade-in-out">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 animate-fade-in-out">
                     Changes saved
                   </div>
                 )}
@@ -259,10 +259,10 @@ export const AttributesInspector: React.FC<AttributesInspectorProps> = ({
           className="flex items-center justify-between mb-2 cursor-pointer"
           onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
         >
-          <div className="text-sm text-gray-500">Metadata</div>
+          <div className="text-sm text-gray-600 dark:text-gray-500">Metadata</div>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className={`h-4 w-4 text-gray-500 transition-transform ${isMetadataExpanded ? "rotate-180" : ""}`}
+            className={`h-4 w-4 text-gray-600 dark:text-gray-500 transition-transform ${isMetadataExpanded ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -277,13 +277,13 @@ export const AttributesInspector: React.FC<AttributesInspectorProps> = ({
         </div>
         {isMetadataExpanded &&
           (disabled || connectionState === ConnectionState.Connected ? (
-            <div className="border border-white/10 rounded-xl bg-surface-2/50 px-3 py-2 mb-4 min-h-[40px] flex items-center">
+            <div className="border border-gray-200 dark:border-white/10 rounded-xl bg-gray-100/70 dark:bg-surface-2/50 px-3 py-2 mb-4 min-h-[40px] flex items-center">
               {metadata ? (
-                <pre className="w-full text-gray-400 text-xs bg-transparent font-mono whitespace-pre-wrap break-words m-0 p-0 border-0">
+                <pre className="w-full text-gray-500 dark:text-gray-400 text-xs bg-transparent font-mono whitespace-pre-wrap break-words m-0 p-0 border-0">
                   {metadata}
                 </pre>
               ) : (
-                <div className="text-sm text-gray-400 font-sans w-full text-left">
+                <div className="text-sm text-gray-500 dark:text-gray-400 font-sans w-full text-left">
                   No metadata set
                 </div>
               )}
@@ -292,7 +292,7 @@ export const AttributesInspector: React.FC<AttributesInspectorProps> = ({
             <textarea
               value={metadata}
               onChange={(e) => onMetadataChange?.(e.target.value)}
-              className="w-full text-gray-300 text-sm bg-surface-2/70 border border-white/10 rounded-xl px-3 py-2 font-mono mb-4 outline-none transition-colors focus:border-white/25 focus:bg-surface-2"
+              className="w-full text-gray-600 dark:text-gray-300 text-sm bg-gray-100/90 dark:bg-surface-2/70 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono mb-4 outline-none transition-colors focus:border-gray-300 dark:focus:border-white/25 focus:bg-gray-100 dark:focus:bg-surface-2"
               placeholder="Enter metadata..."
               rows={3}
             />

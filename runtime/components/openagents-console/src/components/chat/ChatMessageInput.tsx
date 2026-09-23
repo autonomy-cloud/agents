@@ -31,17 +31,17 @@ export const ChatMessageInput = ({
 
   return (
     <div
-      className="flex flex-col justify-center border-t border-t-white/[0.06]"
+      className="flex flex-col justify-center border-t border-t-gray-200 dark:border-t-white/[0.06]"
       style={{ height: height }}
     >
       <div
-        className={`flex flex-row items-center gap-1.5 rounded-full bg-surface-2/70 border pl-4 pr-1.5 py-1.5 transition-colors ${
-          inputHasFocus ? `border-${accentColor}-700` : "border-white/10"
+        className={`flex flex-row items-center gap-1.5 rounded-full bg-gray-100/90 dark:bg-surface-2/70 border pl-4 pr-1.5 py-1.5 transition-colors ${
+          inputHasFocus ? `border-${accentColor}-700` : "border-gray-200 dark:border-white/10"
         }`}
       >
         <input
           ref={inputRef}
-          className="w-full text-sm bg-transparent text-gray-100 placeholder:text-gray-500 focus:outline-none"
+          className="w-full text-sm bg-transparent text-gray-800 dark:text-gray-100 placeholder:text-gray-600 dark:placeholder:text-gray-500 focus:outline-none"
           placeholder={placeholder}
           value={message}
           onChange={(e) => {

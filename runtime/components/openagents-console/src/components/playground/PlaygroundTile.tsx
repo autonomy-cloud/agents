@@ -32,14 +32,14 @@ export const PlaygroundTile: React.FC<PlaygroundTileProps> = ({
   const contentPadding = padding ? 4 : 0;
   const surfaceClass = backgroundColor
     ? `bg-${backgroundColor}`
-    : "bg-surface-1";
+    : "bg-white dark:bg-surface-1";
   return (
     <div
-      className={`flex flex-col rounded-2xl border border-white/[0.06] shadow-card text-gray-400 ${surfaceClass} ${className}`}
+      className={`flex flex-col rounded-2xl border border-gray-200 dark:border-white/[0.06] shadow-card text-gray-500 dark:text-gray-400 ${surfaceClass} ${className}`}
     >
       {title && (
         <div
-          className="flex items-center px-4 text-sm font-medium text-gray-300 border-b border-b-white/[0.06] shrink-0"
+          className="flex items-center px-4 text-sm font-medium text-gray-600 dark:text-gray-300 border-b border-b-gray-200 dark:border-b-white/[0.06] shrink-0"
           style={{
             height: `${titleHeight}px`,
           }}
@@ -71,16 +71,16 @@ export const PlaygroundTabbedTile: React.FC<PlaygroundTabbedTileProps> = ({
   const [activeTab, setActiveTab] = useState(initialTab);
   const surfaceClass = backgroundColor
     ? `bg-${backgroundColor}`
-    : "bg-surface-1";
+    : "bg-white dark:bg-surface-1";
   if (activeTab >= tabs.length) {
     return null;
   }
   return (
     <div
-      className={`flex flex-col h-full rounded-2xl border border-white/[0.06] shadow-card text-gray-400 ${surfaceClass} ${className}`}
+      className={`flex flex-col h-full rounded-2xl border border-gray-200 dark:border-white/[0.06] shadow-card text-gray-500 dark:text-gray-400 ${surfaceClass} ${className}`}
     >
       <div
-        className="flex items-center gap-1 px-2 border-b border-b-white/[0.06] shrink-0"
+        className="flex items-center gap-1 px-2 border-b border-b-gray-200 dark:border-b-white/[0.06] shrink-0"
         style={{
           height: `${titleHeight}px`,
         }}
@@ -90,8 +90,8 @@ export const PlaygroundTabbedTile: React.FC<PlaygroundTabbedTileProps> = ({
             key={index}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               index === activeTab
-                ? "bg-surface-3 text-white"
-                : "bg-transparent text-gray-500 hover:text-gray-300"
+                ? "bg-gray-200 dark:bg-surface-3 text-gray-900 dark:text-white"
+                : "bg-transparent text-gray-600 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
             }`}
             onClick={() => setActiveTab(index)}
           >

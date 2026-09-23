@@ -21,7 +21,7 @@ export const TranscriptTile = ({
   if (messages.length === 0) {
     return (
       <div className="flex items-center justify-center w-full h-full px-6 text-center">
-        <p className="text-xs text-gray-500 leading-relaxed">
+        <p className="text-xs text-gray-600 dark:text-gray-500 leading-relaxed">
           Live speech-to-text will appear here once the conversation starts.
         </p>
       </div>

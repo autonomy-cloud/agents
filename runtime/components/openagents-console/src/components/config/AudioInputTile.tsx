@@ -10,7 +10,7 @@ export const AudioInputTile = ({
 }) => {
   return (
     <div
-      className={`flex flex-row gap-2 h-[100px] items-center w-full justify-center border rounded-xl border-white/10 bg-surface-2`}
+      className={`flex flex-row gap-2 h-[100px] items-center w-full justify-center border rounded-xl border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-surface-2`}
     >
       <BarVisualizer
         track={trackRef}

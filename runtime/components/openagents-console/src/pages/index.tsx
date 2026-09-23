@@ -57,10 +57,9 @@ export function HomeInner() {
         />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-        <link rel="icon" href="/favicon.ico" />
       </Head>
       <main
-        className={`${inter.variable} font-sans relative flex flex-col justify-center px-4 items-center h-full w-full bg-surface-0 repeating-square-background`}
+        className={`${inter.variable} font-sans relative flex flex-col justify-center px-4 items-center h-full w-full bg-gray-50 dark:bg-surface-0 repeating-square-background`}
       >
         <AnimatePresence>
           {toastMessage && (

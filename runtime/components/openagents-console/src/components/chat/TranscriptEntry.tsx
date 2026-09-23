@@ -18,13 +18,15 @@ export const TranscriptEntry = ({
       {!hideName && (
         <div
           className={`text-xs font-medium px-1 ${
-            isAgent ? `text-${accentColor}-400` : "text-gray-400"
+            isAgent
+              ? `text-${accentColor}-600 dark:text-${accentColor}-400`
+              : "text-gray-500 dark:text-gray-400"
           }`}
         >
           {name || (isAgent ? "Agent" : "You")}
         </div>
       )}
-      <p className="text-sm leading-relaxed text-gray-300 px-1 whitespace-pre-line">
+      <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300 px-1 whitespace-pre-line">
         {message}
       </p>
     </div>
