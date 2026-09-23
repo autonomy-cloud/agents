@@ -49,20 +49,20 @@ export function RpcPanel({
       defaultCollapsed={true}
     >
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-gray-500 mt-2">Method name</div>
+        <div className="text-xs text-gray-600 dark:text-gray-500 mt-2">Method name</div>
         <input
           type="text"
           value={rpcMethod}
           onChange={(e) => setRpcMethod(e.target.value)}
-          className="w-full text-white text-sm bg-surface-2/70 border border-white/10 rounded-xl px-3 py-2 outline-none transition-colors focus:border-white/25 focus:bg-surface-2"
+          className="w-full text-gray-900 dark:text-white text-sm bg-gray-100/90 dark:bg-surface-2/70 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 outline-none transition-colors focus:border-gray-300 dark:focus:border-white/25 focus:bg-gray-100 dark:focus:bg-surface-2"
           placeholder="my_method"
         />
 
-        <div className="text-xs text-gray-500 mt-2">Payload</div>
+        <div className="text-xs text-gray-600 dark:text-gray-500 mt-2">Payload</div>
         <textarea
           value={rpcPayload}
           onChange={(e) => setRpcPayload(e.target.value)}
-          className="w-full text-white text-sm bg-surface-2/70 border border-white/10 rounded-xl px-3 py-2 outline-none transition-colors focus:border-white/25 focus:bg-surface-2"
+          className="w-full text-gray-900 dark:text-white text-sm bg-gray-100/90 dark:bg-surface-2/70 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 outline-none transition-colors focus:border-gray-300 dark:focus:border-white/25 focus:bg-gray-100 dark:focus:bg-surface-2"
           placeholder='{"my": "payload"}'
           rows={2}
         />
@@ -85,11 +85,11 @@ export function RpcPanel({
 
         {rpcResult && (
           <>
-            <div className="text-xs text-gray-500 mt-2">
+            <div className="text-xs text-gray-600 dark:text-gray-500 mt-2">
               {rpcResult.success ? "Result" : "Error"}
             </div>
             <div
-              className={`w-full text-sm bg-surface-2/70 border rounded-xl px-3 py-2 whitespace-pre-wrap break-words ${
+              className={`w-full text-sm bg-gray-100/90 dark:bg-surface-2/70 border rounded-xl px-3 py-2 whitespace-pre-wrap break-words ${
                 rpcResult.success
                   ? "border-green-800 text-green-400"
                   : "border-red-800 text-red-400"

@@ -35,7 +35,7 @@ export const PlaygroundDeviceSelector = ({
   return (
     <div>
       <button
-        className="flex gap-2 items-center px-2.5 py-1 bg-surface-2 text-gray-300 border border-white/10 rounded-lg hover:bg-surface-3 transition-colors"
+        className="flex gap-2 items-center px-2.5 py-1 bg-gray-100 dark:bg-surface-2 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-white/10 rounded-lg hover:bg-gray-200 dark:hover:bg-surface-3 transition-colors"
         onClick={(e) => {
           setShowMenu(!showMenu);
           e.stopPropagation();
@@ -47,7 +47,7 @@ export const PlaygroundDeviceSelector = ({
         <ChevronSVG />
       </button>
       <div
-        className="absolute right-4 top-12 bg-surface-2 text-gray-300 border border-white/10 rounded-xl shadow-elevated overflow-hidden z-10"
+        className="absolute right-4 top-12 bg-gray-100 dark:bg-surface-2 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-white/10 rounded-xl shadow-elevated overflow-hidden z-10"
         style={{
           display: showMenu ? "block" : "none",
         }}
@@ -61,9 +61,9 @@ export const PlaygroundDeviceSelector = ({
               }}
               className={`${
                 device.deviceId === deviceSelect.activeDeviceId
-                  ? "text-white"
-                  : "text-gray-500"
-              } text-xs py-2 px-3 cursor-pointer hover:bg-surface-3 hover:text-white transition-colors`}
+                  ? "text-gray-900 dark:text-white"
+                  : "text-gray-600 dark:text-gray-500"
+              } text-xs py-2 px-3 cursor-pointer hover:bg-gray-200 dark:hover:bg-surface-3 hover:text-gray-900 dark:hover:text-white transition-colors`}
               key={index}
             >
               {device.label}

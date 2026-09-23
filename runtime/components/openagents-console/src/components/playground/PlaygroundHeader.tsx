@@ -29,20 +29,22 @@ export const PlaygroundHeader = ({
 
   return (
     <div
-      className={`flex gap-4 pt-4 pb-4 mb-1 border-b border-white/[0.06] text-${accentColor}-500 justify-between items-center shrink-0`}
+      className={`flex gap-4 pt-4 pb-4 mb-1 border-b border-gray-200 dark:border-white/[0.06] text-${accentColor}-500 justify-between items-center shrink-0`}
       style={{
         minHeight: height + "px",
       }}
     >
       <div className="flex items-center gap-3 basis-2/3 min-w-0">
-        <div className={`flex text-${accentColor}-400 shrink-0`}>
+        <div
+          className={`flex text-${accentColor}-600 dark:text-${accentColor}-400 shrink-0`}
+        >
           {logo ?? <AppLogo />}
         </div>
         <div className="min-w-0">
-          <div className="truncate text-sm lg:text-base font-semibold text-white tracking-tight">
+          <div className="truncate text-sm lg:text-base font-semibold text-gray-900 dark:text-white tracking-tight">
             {title}
           </div>
-          <div className="hidden lg:flex items-center gap-1.5 text-xs text-gray-500">
+          <div className="hidden lg:flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-500">
             <span
               className={`inline-block w-1.5 h-1.5 rounded-full ${
                 isConnected
@@ -62,7 +64,7 @@ export const PlaygroundHeader = ({
           <a
             href={githubLink}
             target="_blank"
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
           >
             <GithubSVG />
           </a>

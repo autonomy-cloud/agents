@@ -1,5 +1,3 @@
-/** @type {import('tailwindcss').Config} */
-
 const colors = require("tailwindcss/colors");
 const defaultTheme = require("tailwindcss/defaultTheme");
 const shades = [
@@ -75,12 +73,22 @@ const safelist = [
   ...textShadowNames,
   ...shades.flatMap((shade) => [
     ...colorList.flatMap((color) => [
-      ...uiElements.flatMap((element) => [`${element}-${color}-${shade}`]),
+      ...uiElements.flatMap((element) => [
+        `${element}-${color}-${shade}`,
+        // Also safelist the dark: variant of every dynamically-built accent
+        // color class (e.g. `bg-${accentColor}-950`), since Tailwind's JIT
+        // content scanner can't statically see class names built from JS
+        // template literals — these are used across the light/dark theme
+        // treatment of the user-selectable accent color.
+        `dark:${element}-${color}-${shade}`,
+      ]),
     ]),
   ]),
 ];
 
+/** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: "class",
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     colors: {

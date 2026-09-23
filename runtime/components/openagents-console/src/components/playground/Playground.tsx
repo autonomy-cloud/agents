@@ -57,12 +57,12 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 text-center w-full h-full px-6">
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white/[0.04] text-gray-500">
+      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-white/[0.04] text-gray-600 dark:text-gray-500">
         {icon}
       </div>
       <div className="flex flex-col gap-1 max-w-[280px]">
-        <p className="text-sm font-medium text-gray-300">{title}</p>
-        <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
+        <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{title}</p>
+        <p className="text-xs text-gray-600 dark:text-gray-500 leading-relaxed">{description}</p>
       </div>
     </div>
   );
@@ -299,7 +299,7 @@ export default function Playground({
     }
 
     return (
-      <div className="flex flex-col w-full grow bg-surface-0 rounded-xl overflow-hidden relative">
+      <div className="flex flex-col w-full grow bg-gray-50 dark:bg-surface-0 rounded-xl overflow-hidden relative">
         {content}
       </div>
     );
@@ -324,7 +324,7 @@ export default function Playground({
 
     if (connectionState === ConnectionState.Disconnected) {
       return (
-        <div className="flex flex-col w-full grow bg-surface-0 rounded-xl overflow-hidden relative">
+        <div className="flex flex-col w-full grow bg-gray-50 dark:bg-surface-0 rounded-xl overflow-hidden relative">
           {disconnectedContent}
         </div>
       );
@@ -332,14 +332,14 @@ export default function Playground({
 
     if (!agentWorkstationTrack || !agent.internal.agentParticipant) {
       return (
-        <div className="flex flex-col w-full grow bg-surface-0 rounded-xl overflow-hidden relative">
+        <div className="flex flex-col w-full grow bg-gray-50 dark:bg-surface-0 rounded-xl overflow-hidden relative">
           {waitingContent}
         </div>
       );
     }
 
     return (
-      <div className="flex flex-col w-full grow bg-surface-0 rounded-xl overflow-hidden relative">
+      <div className="flex flex-col w-full grow bg-gray-50 dark:bg-surface-0 rounded-xl overflow-hidden relative">
         <VideoTrack
           trackRef={{
             participant: agent.internal.agentParticipant,
@@ -588,13 +588,13 @@ export default function Playground({
                   disabled={true}
                 />
               )}
-            <p className="text-xs text-gray-500 text-right">
+            <p className="text-xs text-gray-600 dark:text-gray-500 text-right">
               Set an agent name to use{" "}
               <a
                 href="https://docs.livekit.io/agents/server/agent-dispatch/#explicit"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-500 hover:text-gray-300 underline"
+                className="text-gray-600 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 underline"
               >
                 explicit dispatch
               </a>
@@ -665,7 +665,7 @@ export default function Playground({
               {localScreenTrack ? (
                 <div className="relative">
                   <VideoTrack
-                    className="rounded-xl border border-white/10 opacity-80 w-full"
+                    className="rounded-xl border border-gray-200 dark:border-white/10 opacity-80 w-full"
                     trackRef={
                       localScreenTrack
                         ? {
@@ -678,7 +678,7 @@ export default function Playground({
                   />
                 </div>
               ) : (
-                <div className="flex items-center justify-center text-gray-500 text-center text-xs w-full py-4">
+                <div className="flex items-center justify-center text-gray-600 dark:text-gray-500 text-center text-xs w-full py-4">
                   Press the button above to share your screen.
                 </div>
               )}
@@ -699,7 +699,7 @@ export default function Playground({
             {session.local.cameraTrack ? (
               <div className="relative">
                 <VideoTrack
-                  className="rounded-xl border border-white/10 opacity-80 w-full"
+                  className="rounded-xl border border-gray-200 dark:border-white/10 opacity-80 w-full"
                   trackRef={session.local.cameraTrack}
                 />
               </div>
@@ -820,7 +820,6 @@ export default function Playground({
     content: (
       <PlaygroundTile
         padding={false}
-        backgroundColor="gray-950"
         className="h-full w-full basis-1/4 items-start overflow-y-auto flex"
         childrenClassName="h-full grow items-start"
       >
@@ -856,7 +855,7 @@ export default function Playground({
           }}
         />
         <div
-          className={`flex gap-5 py-5 grow w-full overflow-hidden selection:bg-${config.settings.theme_color}-900`}
+          className={`flex gap-5 py-5 grow w-full overflow-hidden selection:bg-${config.settings.theme_color}-200 dark:selection:bg-${config.settings.theme_color}-900`}
           style={{ minHeight: 0 }}
         >
           <div className="flex flex-col grow basis-1/2 gap-4 h-full lg:hidden">
@@ -919,7 +918,6 @@ export default function Playground({
           )}
           <PlaygroundTile
             padding={false}
-            backgroundColor="gray-950"
             className="h-full w-full basis-1/4 items-start overflow-y-auto hidden max-w-[420px] lg:flex"
             childrenClassName="h-full grow items-start"
           >

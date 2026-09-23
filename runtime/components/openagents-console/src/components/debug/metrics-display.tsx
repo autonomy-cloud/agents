@@ -380,7 +380,7 @@ export function MetricsDisplay({ events, className }: MetricsDisplayProps) {
                   />
                 </svg>
                 <span
-                  className="text-[11px] font-normal uppercase tracking-wider text-gray-500"
+                  className="text-[11px] font-normal uppercase tracking-wider text-gray-600 dark:text-gray-500"
                   style={{ fontFamily: TITLE_FONT_STACK }}
                 >
                   {section.title}
@@ -404,7 +404,7 @@ export function MetricsDisplay({ events, className }: MetricsDisplayProps) {
                 >
                   <div className="px-3 pt-1 pb-5 flex items-center gap-1.5">
                     <h3
-                      className="text-xs font-normal uppercase tracking-wider text-gray-500"
+                      className="text-xs font-normal uppercase tracking-wider text-gray-600 dark:text-gray-500"
                       style={{
                         fontFamily: TITLE_FONT_STACK,
                       }}

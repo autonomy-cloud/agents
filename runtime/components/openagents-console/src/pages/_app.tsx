@@ -1,7 +1,12 @@
 import "@livekit/components-styles/components/participant";
 import "@/styles/globals.css";
 import type { AppProps } from "next/app";
+import { ThemeProvider } from "@/hooks/useTheme";
 
 export default function App({ Component, pageProps }: AppProps) {
-  return <Component {...pageProps} />;
+  return (
+    <ThemeProvider>
+      <Component {...pageProps} />
+    </ThemeProvider>
+  );
 }

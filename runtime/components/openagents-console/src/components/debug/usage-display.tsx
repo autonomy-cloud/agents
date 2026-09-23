@@ -15,7 +15,7 @@ function filterUsage<C extends UsageCase>(
   );
 }
 
-const UNIT_CLASS = "text-[20px] ml-0.5 text-gray-500";
+const UNIT_CLASS = "text-[20px] ml-0.5 text-gray-600 dark:text-gray-500";
 
 function DurationValue({ seconds }: { seconds: number | undefined | null }) {
   if (seconds == null) seconds = 0;
@@ -155,7 +155,7 @@ function ModelSection({
   return (
     <div className="flex flex-col gap-1">
       <span
-        className="text-[10px] font-normal uppercase tracking-wider text-gray-500 px-1"
+        className="text-[10px] font-normal uppercase tracking-wider text-gray-600 dark:text-gray-500 px-1"
         style={{ fontFamily: TITLE_FONT_STACK }}
       >
         {label}
@@ -184,7 +184,7 @@ function StatCard({
     >
       <div className="flex items-center gap-1.5">
         <span
-          className="text-[10px] font-normal uppercase tracking-wider text-gray-500"
+          className="text-[10px] font-normal uppercase tracking-wider text-gray-600 dark:text-gray-500"
           style={{ fontFamily: TITLE_FONT_STACK }}
         >
           {label}

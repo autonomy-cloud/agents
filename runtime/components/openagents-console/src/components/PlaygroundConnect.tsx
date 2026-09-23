@@ -4,7 +4,7 @@ import { TokenSource, TokenSourceConfigurable } from "livekit-client";
 import { PlaygroundConnectProps } from "@/lib/types";
 
 const fieldClass =
-  "w-full text-sm text-gray-100 placeholder:text-gray-500 bg-surface-2/70 border border-white/10 rounded-xl px-3.5 py-2.5 outline-none transition-colors focus:border-white/25 focus:bg-surface-2";
+  "w-full text-sm text-gray-800 dark:text-gray-100 placeholder:text-gray-600 dark:placeholder:text-gray-500 bg-gray-100/90 dark:bg-surface-2/70 border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 outline-none transition-colors focus:border-gray-300 dark:focus:border-white/25 focus:bg-gray-100 dark:focus:bg-surface-2";
 
 const TokenConnect = ({
   accentColor,
@@ -16,7 +16,7 @@ const TokenConnect = ({
   return (
     <div className="flex flex-col gap-3 w-full">
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium text-gray-400" htmlFor="lk-url">
+        <label className="text-xs font-medium text-gray-500 dark:text-gray-400" htmlFor="lk-url">
           Server URL
         </label>
         <input
@@ -24,12 +24,12 @@ const TokenConnect = ({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           className={fieldClass}
-          placeholder="wss://your-project.livekit.cloud"
+          placeholder="ws://127.0.0.1:7880"
         ></input>
       </div>
       <div className="flex flex-col gap-1.5">
         <label
-          className="text-xs font-medium text-gray-400"
+          className="text-xs font-medium text-gray-500 dark:text-gray-400"
           htmlFor="lk-token"
         >
           Room token
@@ -62,7 +62,7 @@ const TokenConnect = ({
 
 const ConsoleMark = ({ accentColor }: { accentColor: string }) => (
   <div
-    className={`flex items-center justify-center w-11 h-11 rounded-2xl bg-${accentColor}-950 border border-${accentColor}-800 text-${accentColor}-400 shrink-0`}
+    className={`flex items-center justify-center w-11 h-11 rounded-2xl bg-${accentColor}-100 dark:bg-${accentColor}-950 border border-${accentColor}-300 dark:border-${accentColor}-800 text-${accentColor}-600 dark:text-${accentColor}-400 shrink-0`}
   >
     <svg
       width="22"
@@ -96,20 +96,20 @@ export const PlaygroundConnect = ({
   accentColor,
   onConnectClicked,
 }: PlaygroundConnectProps) => {
-  const copy = "Connect to a room with a LiveKit URL and access token.";
+  const copy = "Connect to a room with a server URL and access token.";
   return (
     <div className="flex w-full h-full items-center justify-center px-4">
-      <div className="w-full max-w-[440px] rounded-2xl border border-white/[0.07] bg-surface-1 shadow-elevated overflow-hidden">
+      <div className="w-full max-w-[440px] rounded-2xl border border-gray-200 dark:border-white/[0.07] bg-white dark:bg-surface-1 shadow-elevated overflow-hidden">
         <div className="flex flex-col items-start gap-4 px-8 pt-8 pb-6">
           <ConsoleMark accentColor={accentColor} />
           <div className="flex flex-col gap-1.5">
-            <h1 className="text-xl font-semibold text-white tracking-tight">
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-white tracking-tight">
               Connect to the console
             </h1>
-            <p className="text-sm text-gray-400 leading-relaxed">{copy}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{copy}</p>
           </div>
         </div>
-        <div className="flex flex-col px-8 pb-8 pt-2 border-t border-white/[0.06]">
+        <div className="flex flex-col px-8 pb-8 pt-2 border-t border-gray-200 dark:border-white/[0.06]">
           <TokenConnect
             accentColor={accentColor}
             onConnectClicked={onConnectClicked}

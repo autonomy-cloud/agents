@@ -1,6 +1,7 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { CheckIcon, ChevronIcon } from "./icons";
+import { CheckIcon, ChevronIcon, MoonIcon, SunIcon } from "./icons";
 import { useConfig } from "@/hooks/useConfig";
+import { useTheme } from "@/hooks/useTheme";
 
 type SettingType = "inputs" | "outputs" | "chat" | "theme_color";
 
@@ -56,6 +57,7 @@ const settingsDropdown: SettingValue[] = [
 
 export const SettingsDropdown = () => {
   const { config, setUserSettings } = useConfig();
+  const { theme, toggleTheme } = useTheme();
 
   const isEnabled = (setting: SettingValue) => {
     if (setting.type === "separator" || setting.type === "theme_color")
@@ -92,13 +94,13 @@ export const SettingsDropdown = () => {
 
   return (
     <DropdownMenu.Root modal={false}>
-      <DropdownMenu.Trigger className="group inline-flex max-h-12 items-center gap-1.5 rounded-xl hover:bg-surface-3 bg-surface-2 border border-white/10 px-3 py-1.5 text-gray-200 my-auto text-sm font-medium h-full transition-colors">
+      <DropdownMenu.Trigger className="group inline-flex max-h-12 items-center gap-1.5 rounded-xl hover:bg-gray-200 dark:hover:bg-surface-3 bg-gray-100 dark:bg-surface-2 border border-gray-200 dark:border-white/10 px-3 py-1.5 text-gray-700 dark:text-gray-200 my-auto text-sm font-medium h-full transition-colors">
         Settings
         <ChevronIcon />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className="z-50 flex w-60 flex-col gap-0.5 overflow-hidden rounded-xl text-gray-100 border border-white/10 bg-surface-1 shadow-elevated p-1.5 text-sm"
+          className="z-50 flex w-60 flex-col gap-0.5 overflow-hidden rounded-xl text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-white/10 bg-white dark:bg-surface-1 shadow-elevated p-1.5 text-sm"
           sideOffset={8}
           collisionPadding={16}
         >
@@ -107,7 +109,7 @@ export const SettingsDropdown = () => {
               return (
                 <div
                   key={setting.key}
-                  className="border-t border-white/[0.06] my-1.5"
+                  className="border-t border-gray-200 dark:border-white/[0.06] my-1.5"
                 />
               );
             }
@@ -116,15 +118,25 @@ export const SettingsDropdown = () => {
               <DropdownMenu.Label
                 key={setting.key}
                 onClick={() => toggleSetting(setting)}
-                className="flex max-w-full flex-row items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-gray-300 hover:bg-surface-3 hover:text-white cursor-pointer transition-colors"
+                className="flex max-w-full flex-row items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-surface-3 hover:text-gray-900 dark:hover:text-white cursor-pointer transition-colors"
               >
-                <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                <div className="w-4 h-4 flex items-center justify-center shrink-0 text-gray-900 dark:text-white">
                   {isEnabled(setting) && <CheckIcon />}
                 </div>
                 <span>{setting.title}</span>
               </DropdownMenu.Label>
             );
           })}
+          <div className="border-t border-gray-200 dark:border-white/[0.06] my-1.5" />
+          <DropdownMenu.Label
+            onClick={toggleTheme}
+            className="flex max-w-full flex-row items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-surface-3 hover:text-gray-900 dark:hover:text-white cursor-pointer transition-colors"
+          >
+            <div className="w-4 h-4 flex items-center justify-center shrink-0">
+              {theme === "dark" ? <MoonIcon /> : <SunIcon />}
+            </div>
+            <span>{theme === "dark" ? "Dark theme" : "Light theme"}</span>
+          </DropdownMenu.Label>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
