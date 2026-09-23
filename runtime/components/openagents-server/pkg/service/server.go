@@ -138,6 +138,7 @@ func NewLivekitServer(conf *config.Config,
 		mux = http.DefaultServeMux
 		mux.HandleFunc("/debug/goroutine", s.debugGoroutines)
 		mux.HandleFunc("/debug/rooms", s.debugInfo)
+		mux.HandleFunc("/debug/agents", s.debugAgents)
 	}
 
 	xtwirp.RegisterServer(mux, roomServer)
@@ -387,6 +388,18 @@ func (s *LivekitServer) debugInfo(w http.ResponseWriter, _ *http.Request) {
 		info = append(info, room.DebugInfo())
 	}
 	s.roomManager.lock.RUnlock()
+
+	b, err := json.Marshal(info)
+	if err != nil {
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte(err.Error()))
+	} else {
+		_, _ = w.Write(b)
+	}
+}
+
+func (s *LivekitServer) debugAgents(w http.ResponseWriter, _ *http.Request) {
+	info := s.agentService.DebugInfo()
 
 	b, err := json.Marshal(info)
 	if err != nil {
