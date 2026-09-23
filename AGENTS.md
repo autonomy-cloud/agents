@@ -133,6 +133,31 @@ incoming audio back into the LiveKit room) — see
 `openagents-teams-bridge/ABSORBED.md` for how the audio bridging actually
 works, and its licensing caveat.
 
+### VS Code extensions: coworker-meet and copilot-llm-bridge
+
+Two independent VS Code extensions live under `runtime/components/`,
+alongside everything else:
+
+| Component | What it is |
+| --- | --- |
+| `coworker-meet` | Join a real LiveKit meeting from inside VS Code, with `openagents-coworker` (Anika) actually in the room. Also registers Anika as a real VS Code chat session (Chat view / Agents Window), via the proposed `chatSessionsProvider` API. |
+| `copilot-llm-bridge` | Exposes VS Code's Language Model API (GitHub Copilot's chat models, from inside the editor) as a local OpenAI-compatible HTTP endpoint — an alternative `OPENAGENTS_OPENAI_BASE_URL` source for orgs where the only model access is an enterprise Copilot license. Its `@remote` chat participant can also forward a prompt to *another* VS Code+Copilot instance's own bridge and stream the reply back. |
+
+Each is a standalone npm package (own `package.json`, own build), not
+wired into `dev-up.sh` — build and run them like any VS Code extension:
+
+```bash
+cd runtime/components/coworker-meet   # or copilot-llm-bridge
+npm install
+npm run build   # or: npm run watch
+```
+
+Then press **F5** in VS Code with that folder open to launch an Extension
+Development Host. See each package's own `README.md` for setup and
+architecture; `coworker-meet`'s README also covers the proposed-API
+stability caveats (it needs Insiders or `--enable-proposed-api
+autonomy-cloud.coworker-meet` for the chat-session registration to work).
+
 ### Known environment gotchas (already worked around in `dev-up.sh`, documented here so they're not mistaken for new bugs)
 
 - **This checkout's path contains `:`** (`.../github.com:autonomy-cloud/`),

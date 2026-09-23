@@ -1,0 +1,159 @@
+:root {
+  --clb-radius-lg: 14px;
+  --clb-radius-md: 10px;
+  --clb-radius-sm: 7px;
+  --clb-accent: #8b7cf6;
+  --clb-accent-soft: rgba(139, 124, 246, 0.16);
+  --clb-live: #3fd68a;
+  --clb-off: #6b7280;
+  --clb-error: #eb5757;
+  --clb-font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', var(--vscode-font-family, sans-serif);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--clb-font);
+  font-size: 13px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--clb-radius-lg);
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.2));
+  background: var(--vscode-sideBar-background, transparent);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  background: var(--clb-off);
+}
+
+.dot--live {
+  background: var(--clb-live);
+  box-shadow: 0 0 0 3px rgba(63, 214, 138, 0.18);
+}
+
+.dot--error {
+  background: var(--clb-error);
+  box-shadow: 0 0 0 3px rgba(235, 87, 87, 0.18);
+}
+
+.status-text h1 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.status-text p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #9098a3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vscode-descriptionForeground, #9098a3);
+}
+
+.field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.value-box {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--clb-radius-sm);
+  border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.3));
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button {
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  border-radius: var(--clb-radius-sm);
+  padding: 8px 14px;
+  border: none;
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+
+.btn-primary {
+  background: var(--clb-accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-secondary {
+  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.12));
+  color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+}
+
+.btn-secondary:hover {
+  background: var(--clb-accent-soft);
+  border-color: var(--clb-accent);
+}
+
+.btn-danger {
+  background: rgba(235, 87, 87, 0.14);
+  color: var(--clb-error);
+  border: 1px solid rgba(235, 87, 87, 0.4);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--vscode-descriptionForeground, #9098a3);
+}

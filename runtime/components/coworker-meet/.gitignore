@@ -1,0 +1,8 @@
+node_modules/
+dist/
+out/
+*.vsix
+
+# Prebuilt embedded server binaries are a local build artifact (see
+# scripts/build-server.mjs) — not meant to be committed.
+bin/
