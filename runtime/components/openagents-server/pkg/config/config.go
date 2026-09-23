@@ -250,6 +250,12 @@ type TURNConfig struct {
 	RelayPortRangeEnd   uint16   `yaml:"relay_range_end,omitempty"`
 	ExternalTLS         bool     `yaml:"external_tls,omitempty"`
 	BindAddresses       []string `yaml:"bind_addresses,omitempty"`
+	// Additional hostname (not an IP) advertised alongside the node-ip-based
+	// TURN URL, reusing the same generated credentials. For clients that
+	// can't route to the node IP directly but can resolve a well-known host
+	// name (e.g. "host.docker.internal" from inside a Docker Desktop
+	// container reaching the host). Empty by default — no effect unless set.
+	ExtraAdvertisedHost string `yaml:"extra_advertised_host,omitempty"`
 	// TTL of the TURN credentials in seconds - defaults to 300
 	TTLSeconds int `yaml:"ttl_seconds,omitempty"`
 	// list of restricted peer CIDRs (loopback, link-local (unicast, multicast), multicast, private, unspecified) to allow access to.

@@ -16,6 +16,7 @@ must not download components or model files.
 | Console UI baseline (agents-playground, Apache-2.0) | `2a2d1dbe3317100366bc86f53f253b59394dca3c` | Rebranded/redesigned web console, absorbed into `openagents-console` — see `openagents-console/ABSORBED.md` |
 | Desktop orchestration baseline (portabledesktop, MIT) | `6d29d49a2f268ca7fab93826878bf9ea8dda015d` | Xvnc-backed desktop session start/stop, absorbed into `openagents-workstation/internal/pd` |
 | LiveKit server SDK baseline (server-sdk-go, Apache-2.0) | `2088dabd34424add79fd0baab2112c348838fd33` | Go room/track-publishing client, vendored into `openagents-workstation/vendor` |
+| Teams meeting-join baseline (attendee-labs/attendee, **Elastic License 2.0 — policy exception, not MIT/Apache**) | `f40cd1fa93749532c0368864c528666327564ceb` (via `autonomy-cloud/cast`'s `cast-meeting`) | Browser-automation Teams/meeting join + audio bridge, absorbed into `openagents-teams-bridge/runtime` — see that component's `ABSORBED.md` for the license exception rationale |
 
 Apache-2.0 license and notice files from each upstream component are preserved
 inside its component directory. A release build must also generate an SBOM and

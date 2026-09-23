@@ -1062,6 +1062,12 @@ func (r *RoomManager) iceServersForParticipant(apiKey string, participant types.
 			for _, ip := range r.config.RTC.NodeIP.ToStringSlice() {
 				urls = append(urls, fmt.Sprintf("turn:%s?transport=udp", net.JoinHostPort(ip, strconv.Itoa(int(r.config.TURN.UDPPort)))))
 			}
+			// Same physical TURN listener, reachable by a second name for
+			// clients that can't route to the node IP directly (see
+			// ExtraAdvertisedHost doc comment in config.go).
+			if r.config.TURN.ExtraAdvertisedHost != "" {
+				urls = append(urls, fmt.Sprintf("turn:%s?transport=udp", net.JoinHostPort(r.config.TURN.ExtraAdvertisedHost, strconv.Itoa(int(r.config.TURN.UDPPort)))))
+			}
 		}
 		if r.config.TURN.TLSPort > 0 {
 			urls = append(urls, fmt.Sprintf("turns:%s:443?transport=tcp", r.config.TURN.Domain))

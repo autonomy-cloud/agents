@@ -55,9 +55,9 @@ not become user-facing configuration.
 - Python installation uses the checked-in wheelhouse and `--no-index`.
 - Every release includes hashes, an SBOM, and third-party license notices.
 
-## Local dev stack: server + coworker + workstation + console
+## Local dev stack: server + coworker + workstation + console + teams-bridge
 
-Four first-party components under `runtime/components/` build a complete,
+Five first-party components under `runtime/components/` build a complete,
 runnable "digital coworker" stack on top of the air-gapped core above (see
 `runtime/COMPONENTS.md` for exact upstream provenance of each):
 
@@ -67,6 +67,7 @@ runnable "digital coworker" stack on top of the air-gapped core above (see
 | `openagents-coworker` | The Anika voice agent worker (Python, `openagents-core` + `openagents-plugins`) |
 | `openagents-workstation` | Gives the coworker a real Linux desktop it can share into a room (Go + Docker) |
 | `openagents-console` | Web UI for joining/testing coworker sessions (Next.js) |
+| `openagents-teams-bridge` | Lets the coworker join an external Microsoft Teams meeting by URL (Django + Selenium/Chrome, Docker) — **note: ELv2-licensed, a documented exception to the MIT/Apache-only policy above, see its `ABSORBED.md`** |
 
 Unlike the core runtime above, these four have real, ordinary network
 dependencies at build time (Docker's `apt-get`, `uv`/`pnpm` package
@@ -105,6 +106,32 @@ a text message, which reaches the agent through `openagents-core`'s
 existing `room_io` text-input handler (topic `lk.chat` →
 `session.generate_reply()`) with no STT model required; it shows up in the
 Chat panel like any other message.
+
+### Inviting the coworker to a Microsoft Teams meeting
+
+Opt-in, off by default (heavy image: Chrome + Xvfb + gstreamer + its own
+Postgres/Redis):
+
+```bash
+ENABLE_TEAMS_BRIDGE=1 ./scripts/dev-up.sh
+```
+
+This generates `.env.teams-bridge` at the repo root (once, gitignored — a
+Django secret key, a Fernet credentials-encryption key, and a service API
+token) and starts `openagents-teams-bridge`'s three services (a dedicated
+Postgres, the API app on `127.0.0.1:7000`, and a Celery worker that runs the
+actual Selenium/Chrome bot). Copy `TEAMS_BRIDGE_API_TOKEN` out of that file
+into `openagents-console/.env.local` too (see `.env.example`) if you're
+running the console as a separate `pnpm dev` process, since it needs the
+token to call the bridge's internal API server-side.
+
+Once connected in the console with an active session, the Settings panel's
+"Teams meeting" field accepts a `teams.microsoft.com`/`teams.live.com`
+meeting link and bridges the currently-connected agent's LiveKit audio
+track into that meeting as the bot's "microphone" (and the meeting's
+incoming audio back into the LiveKit room) — see
+`openagents-teams-bridge/ABSORBED.md` for how the audio bridging actually
+works, and its licensing caveat.
 
 ### Known environment gotchas (already worked around in `dev-up.sh`, documented here so they're not mistaken for new bugs)
 
