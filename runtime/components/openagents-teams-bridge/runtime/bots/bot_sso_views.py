@@ -1,5 +1,6 @@
 import logging
 import os
+import uuid
 
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.utils.decorators import method_decorator
@@ -23,6 +24,15 @@ class GoogleMeetSetCookieView(View):
         session_id = request.GET.get("session_id")
         if not session_id:
             logger.warning("GoogleMeetSetCookieView could not set cookie: session_id is missing")
+            return HttpResponseBadRequest("Could not set cookie")
+
+        # session_id is always server-generated as uuid.uuid4() (see
+        # create_google_meet_sign_in_session in bot_sso_utils.py) — reject
+        # anything else before it's used as a cookie value or redis key.
+        try:
+            uuid.UUID(session_id)
+        except ValueError:
+            logger.warning("GoogleMeetSetCookieView could not set cookie: session_id is not a valid UUID")
             return HttpResponseBadRequest("Could not set cookie")
 
         # Check in redis store to confirm that a key with the id "google_meet_sign_in_session:<session_id>" exists

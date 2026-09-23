@@ -1314,9 +1314,15 @@ class ChatMessageManager {
         this.chatMessages = {};
     }
 
-    // The more sophisticated approach gets blocked by trusted html csp
+    // A single regex pass over tags can be bypassed by malformed/nested
+    // markup (e.g. "<scr<script>ipt>"). Let the browser's own HTML parser
+    // do the work instead via a detached element's textContent, which
+    // handles every such edge case correctly and can't itself execute
+    // anything since the element is never attached to the document.
     stripHtml(html) {
-        return html.replace(/<[^>]*>/g, '');
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        return div.textContent || div.innerText || '';
     }
 
     // Teams client sometimes sends duplicate updates, this filters them out.

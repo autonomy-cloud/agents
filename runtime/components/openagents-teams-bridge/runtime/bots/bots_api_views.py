@@ -523,7 +523,7 @@ class OutputAudioView(APIView):
             except Exception as e:
                 error_message_first_line = str(e).split("\n")[0]
                 logging.error(f"Error creating audio blob: {error_message_first_line} (content_type={content_type}, bot_id={object_id})")
-                return Response({"error": f"Error creating the audio blob. Are you sure it's a valid {content_type} file?", "raw_error": error_message_first_line}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": f"Error creating the audio blob. Are you sure it's a valid {content_type} file?"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Create BotMediaRequest
             BotMediaRequest.objects.create(
@@ -638,7 +638,7 @@ class DeleteDataView(APIView):
         except Exception as e:
             logging.exception(f"Error deleting bot data: {str(e)}", extra={"bot_id": object_id})
             return Response(
-                {"error": str(e)},
+                {"error": "Error deleting bot data"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

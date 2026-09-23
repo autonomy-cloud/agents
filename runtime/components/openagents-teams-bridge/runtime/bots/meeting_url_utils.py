@@ -68,6 +68,29 @@ def domain_and_subdomain_from_url(url):
     return extract_from_url.subdomain + "." + extract_from_url.registered_domain
 
 
+# Query params that carry a meeting join passcode (Teams' "p", Zoom's "pwd"/
+# "tk"/"zak") — logging a meeting URL as-is leaks whatever secret grants
+# access to the meeting, so anything that logs a URL should log this instead.
+_MEETING_URL_SECRET_PARAMS = {"p", "pwd", "tk", "zak", "password"}
+
+
+def redact_meeting_url(url):
+    if not url:
+        return url
+    try:
+        parsed = urlparse(url)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        if not any(key.lower() in _MEETING_URL_SECRET_PARAMS for key in query):
+            return url
+        redacted_query = "&".join(
+            f"{key}=[REDACTED]" if key.lower() in _MEETING_URL_SECRET_PARAMS else f"{key}={unquote(value[0]) if value else ''}"
+            for key, value in query.items()
+        )
+        return urlunparse(parsed._replace(query=redacted_query))
+    except ValueError:
+        return "[unparseable meeting URL]"
+
+
 def meeting_type_from_url(url):
     meeting_type, normalized_url = normalize_meeting_url(url)
     return meeting_type

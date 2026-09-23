@@ -238,7 +238,7 @@ def get_elevenlabs_language_codes():
     ]
 
 
-from .meeting_url_utils import meeting_type_from_url, normalize_meeting_url
+from .meeting_url_utils import meeting_type_from_url, normalize_meeting_url, redact_meeting_url
 from .utils import is_valid_image, transcription_provider_from_bot_creation_data
 
 # Define the schema once
@@ -491,11 +491,11 @@ class BotValidationMixin:
     def validate_meeting_url(self, value):
         meeting_type, normalized_url = normalize_meeting_url(value)
         if meeting_type is None:
-            logger.error(f"Invalid meeting URL: {value}")
+            logger.error(f"Invalid meeting URL: {redact_meeting_url(value)}")
             raise serializers.ValidationError("Invalid meeting URL")
 
         if normalized_url != value:
-            logger.info(f"Normalized Meeting URL: {normalized_url} from {value}")
+            logger.info(f"Normalized Meeting URL: {redact_meeting_url(normalized_url)} from {redact_meeting_url(value)}")
         return normalized_url
 
     def validate_join_at(self, value):

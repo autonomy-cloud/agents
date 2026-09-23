@@ -439,7 +439,8 @@ class CreateCredentialsView(LoginRequiredMixin, ProjectUrlContextMixin, View):
             return get_partial_for_credential_type(credential.credential_type, request, context)
 
         except Exception as e:
-            return HttpResponse(str(e), status=400)
+            logger.exception(f"Error saving credentials: {e}")
+            return HttpResponse("Error saving credentials", status=400)
 
 
 class DeleteCredentialsView(LoginRequiredMixin, ProjectUrlContextMixin, View):
@@ -1358,7 +1359,8 @@ class CheckoutSuccessView(LoginRequiredMixin, ProjectUrlContextMixin, View):
         try:
             checkout_session = stripe.checkout.Session.retrieve(session_id, api_key=os.getenv("STRIPE_SECRET_KEY"))
         except Exception as e:
-            return HttpResponse(f"Error retrieving session details: {e}", status=400)
+            logger.exception(f"Error retrieving checkout session details: {e}")
+            return HttpResponse("Error retrieving session details", status=400)
 
         process_checkout_session_completed(checkout_session)
 
@@ -1434,7 +1436,8 @@ class CreateBotView(LoginRequiredMixin, ProjectUrlContextMixin, View):
 
             return HttpResponse("ok", status=200)
         except Exception as e:
-            return HttpResponse(str(e), status=400)
+            logger.exception(f"Error creating adhoc bot from dashboard: {e}")
+            return HttpResponse("Error creating bot", status=400)
 
 
 class CreateProjectView(AdminRequiredMixin, View):
