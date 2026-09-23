@@ -28,6 +28,10 @@ type EditableNameValueRowProps = {
   onValueChange?: (value: string) => void;
   placeholder?: string;
   editable: boolean;
+  // Optional id of a <datalist> (rendered by the caller) to attach to the
+  // input, turning it into a free-type-still-allowed combobox: existing
+  // options are suggested, but any value can still be typed.
+  listId?: string;
 };
 
 export const EditableNameValueRow: React.FC<EditableNameValueRowProps> = ({
@@ -37,6 +41,7 @@ export const EditableNameValueRow: React.FC<EditableNameValueRowProps> = ({
   onValueChange,
   placeholder,
   editable,
+  listId,
 }) => {
   if (editable && onValueChange) {
     return (
@@ -48,6 +53,8 @@ export const EditableNameValueRow: React.FC<EditableNameValueRowProps> = ({
           onChange={(e) => onValueChange(e.target.value)}
           className={`text-xs shrink text-${valueColor} text-right bg-transparent border-b border-gray-300 dark:border-gray-800 focus:outline-none focus:border-gray-400 dark:focus:border-gray-600 px-2 py-0`}
           placeholder={placeholder}
+          list={listId}
+          autoComplete="off"
         />
       </div>
     );
