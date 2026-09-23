@@ -135,28 +135,32 @@ works, and its licensing caveat.
 
 ### Optional: giving Anika a Copilot-backed LLM via the Copilot LLM Bridge extension
 
-A separate, sibling repo — `autonomy-cloud/copilot-llm-bridge` — is a VS
-Code extension that exposes VS Code's official Language Model API
-(`vscode.lm`, i.e. GitHub Copilot's chat models from inside the editor) as a
-local OpenAI-compatible HTTP endpoint. This is an alternative to
-`OPENAGENTS_OPENAI_BASE_URL` pointing at a real internal OpenAI-compatible
-endpoint, useful when the only model access available is through an
-enterprise Copilot license. See that repo's own `README.md` for the full
-rationale (and why it's meaningfully different from — and safer than — a
-Copilot-API-token-replay proxy).
+A separate, sibling repo — `autonomy-cloud/coworker-meet-extension` — is a
+small monorepo of VS Code extensions; its `copilot-llm-bridge/` package
+exposes VS Code's official Language Model API (`vscode.lm`, i.e. GitHub
+Copilot's chat models from inside the editor) as a local OpenAI-compatible
+HTTP endpoint. This is an alternative to `OPENAGENTS_OPENAI_BASE_URL`
+pointing at a real internal OpenAI-compatible endpoint, useful when the only
+model access available is through an enterprise Copilot license. See that
+package's own `README.md` for the full rationale (and why it's meaningfully
+different from — and safer than — a Copilot-API-token-replay proxy). The
+same repo's `coworker-meet/` package is also worth knowing about: it joins
+`openagents-coworker` into a real LiveKit room from inside VS Code, and
+registers Anika as a real VS Code chat session (Chat view / Agents Window).
 
-To install and use it:
+To install and use the bridge:
 
 ```bash
-cd ../copilot-llm-bridge   # sibling of this repo, under the same autonomy-cloud org root
+cd ../coworker-meet-extension/copilot-llm-bridge   # sibling of this repo, under the same autonomy-cloud org root
 npm install
 npm run build
 ```
 
 Then in VS Code: `Extensions` view → `...` menu → **Install from VSIX...**
 is for a packaged build; for local development instead open the
-`copilot-llm-bridge` folder in VS Code and press **F5** to launch an
-Extension Development Host with it loaded. Once running there:
+`copilot-llm-bridge` folder (not the repo root -- it's a monorepo of
+independent packages) in VS Code and press **F5** to launch an Extension
+Development Host with it loaded. Once running there:
 
 1. Run **Copilot LLM Bridge: Start** from the Command Palette (or the
    activity bar panel's Start button) — this is a user-initiated action on
