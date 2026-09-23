@@ -22,7 +22,10 @@ services:
       OPENAGENTS_API_KEY: ${OPENAGENTS_API_KEY:-devkey}
       OPENAGENTS_API_SECRET: ${OPENAGENTS_API_SECRET:-secret}
       ROOM_NAME: ${ROOM_NAME:-coworker-standup}
-      COWORKER_IDENTITY: ${COWORKER_IDENTITY:-anika-coworker}
+      # Distinct from openagents-coworker's default identity (anika-coworker)
+      # so they don't collide over the same LiveKit participant slot — see
+      # cmd/openagents-workstation/main.go's loadConfig() comment.
+      COWORKER_IDENTITY: ${COWORKER_IDENTITY:-anika-coworker-desktop}
     extra_hosts:
       # host.docker.internal is automatic on Docker Desktop (macOS/Windows);
       # this makes it resolve on Linux Docker too.
