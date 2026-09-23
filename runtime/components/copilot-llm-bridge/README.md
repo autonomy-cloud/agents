@@ -26,7 +26,10 @@ it isn't squarely "intended use" either. Use your own judgment.
 
 ## Usage
 
-1. Install the extension, open a workspace with GitHub Copilot signed in.
+0. Install it — either `npm install && npm run watch` + F5 for a dev host,
+   or for a real install: `npm install && npm run package:vsix && code
+   --install-extension dist/copilot-llm-bridge.vsix`.
+1. Open a workspace with GitHub Copilot signed in.
 2. Run **Copilot LLM Bridge: Start** from the Command Palette (or the
    sidebar panel's Start button). The first run triggers Copilot's normal
    consent dialog — this only works from a user-initiated action, which is

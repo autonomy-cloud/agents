@@ -67,13 +67,25 @@ same as any other participant's camera.
 
 ## Setup
 
+**Dev host (fastest iteration):**
 1. `npm install`
-2. `npm run build` (or `npm run watch` while developing)
+2. `npm run watch` (rebuilds on save)
 3. Press F5 in VS Code to launch an Extension Development Host
+
+**Real install** (ends up in your normal VS Code, not a throwaway dev host):
+1. `npm install`
+2. `npm run package:vsix` → `dist/coworker-meet.vsix`
+3. `code --install-extension dist/coworker-meet.vsix`
+
+Either way, then:
 4. Set `coworkerMeet.livekitUrl` and `coworkerMeet.apiKey` in Settings
 5. Run `Coworker Meet: Set API Secret` (stored in VS Code SecretStorage,
    not settings.json)
 6. Run `Coworker Meet: Join Meeting`
+
+For the chat-session registration specifically (Chat view / Agents Window),
+see "Anika as a chat session" below — it needs Insiders or
+`--enable-proposed-api autonomy-cloud.coworker-meet`.
 
 ## Architecture
 

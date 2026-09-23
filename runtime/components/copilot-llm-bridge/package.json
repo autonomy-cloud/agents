@@ -5,10 +5,18 @@
   "version": "0.1.0",
   "publisher": "autonomy-cloud",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/autonomy-cloud/agents",
+    "directory": "runtime/components/copilot-llm-bridge"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other", "Machine Learning"],
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
   "main": "./dist/extension.js",
   "activationEvents": [],
   "contributes": {
@@ -97,7 +105,10 @@
           "description": "Other VS Code+Copilot instances' own Copilot LLM Bridge endpoints, reachable from this one's @remote chat participant.",
           "items": {
             "type": "object",
-            "required": ["name", "baseUrl"],
+            "required": [
+              "name",
+              "baseUrl"
+            ],
             "properties": {
               "name": {
                 "type": "string",
@@ -118,11 +129,21 @@
     },
     "menus": {
       "commandPalette": [
-        { "command": "copilotLlmBridge.start" },
-        { "command": "copilotLlmBridge.stop" },
-        { "command": "copilotLlmBridge.selectModel" },
-        { "command": "copilotLlmBridge.copyBaseUrl" },
-        { "command": "copilotLlmBridge.showLogs" }
+        {
+          "command": "copilotLlmBridge.start"
+        },
+        {
+          "command": "copilotLlmBridge.stop"
+        },
+        {
+          "command": "copilotLlmBridge.selectModel"
+        },
+        {
+          "command": "copilotLlmBridge.copyBaseUrl"
+        },
+        {
+          "command": "copilotLlmBridge.showLogs"
+        }
       ]
     }
   },
@@ -130,11 +151,13 @@
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "package": "node esbuild.mjs --production",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "package:vsix": "npm run package && node ./node_modules/@vscode/vsce/vsce package --out dist/copilot-llm-bridge.vsix"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.24.0",
     "typescript": "^5.5.4"
   }

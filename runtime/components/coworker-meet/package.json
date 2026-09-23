@@ -5,6 +5,11 @@
   "version": "0.1.0",
   "publisher": "autonomy-cloud",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/autonomy-cloud/agents",
+    "directory": "runtime/components/coworker-meet"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -141,11 +146,13 @@
     "build:server": "node scripts/build-server.mjs",
     "watch": "node esbuild.mjs --watch",
     "package": "node esbuild.mjs --production",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "package:vsix": "npm run package && node ./node_modules/@vscode/vsce/vsce package --out dist/coworker-meet.vsix"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.24.0",
     "typescript": "^5.5.4",
     "vscode-dts": "^0.3.3"
