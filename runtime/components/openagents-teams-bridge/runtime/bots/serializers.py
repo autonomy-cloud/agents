@@ -495,7 +495,11 @@ class BotValidationMixin:
             raise serializers.ValidationError("Invalid meeting URL")
 
         if normalized_url != value:
-            logger.info(f"Normalized Meeting URL: {redact_meeting_url(normalized_url)} from {redact_meeting_url(value)}")
+            # Deliberately not logging either URL: both can carry a meeting
+            # join passcode in their query string (Teams' "p", Zoom's
+            # "pwd"/"tk"/"zak") — knowing normalization happened is enough
+            # for debugging without risking a credential in the logs.
+            logger.info(f"Normalized meeting URL for meeting_type={meeting_type}")
         return normalized_url
 
     def validate_join_at(self, value):
