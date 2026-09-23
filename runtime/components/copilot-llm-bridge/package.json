@@ -1,0 +1,164 @@
+{
+  "name": "copilot-llm-bridge",
+  "displayName": "Copilot LLM Bridge",
+  "description": "Expose VS Code's Language Model API (GitHub Copilot's chat models) as a local OpenAI-compatible HTTP endpoint, for other local tools to use as an LLM base URL.",
+  "version": "0.1.0",
+  "publisher": "autonomy-cloud",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/autonomy-cloud/agents",
+    "directory": "runtime/components/copilot-llm-bridge"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "copilotLlmBridge.remote",
+        "name": "remote",
+        "fullName": "Remote Copilot",
+        "description": "Forwards this message to another VS Code+Copilot instance's own Copilot LLM Bridge and streams its reply back.",
+        "isSticky": true
+      }
+    ],
+    "commands": [
+      {
+        "command": "copilotLlmBridge.start",
+        "title": "Copilot LLM Bridge: Start",
+        "icon": "$(play)"
+      },
+      {
+        "command": "copilotLlmBridge.stop",
+        "title": "Copilot LLM Bridge: Stop",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "copilotLlmBridge.selectModel",
+        "title": "Copilot LLM Bridge: Select Model..."
+      },
+      {
+        "command": "copilotLlmBridge.copyBaseUrl",
+        "title": "Copilot LLM Bridge: Copy Base URL"
+      },
+      {
+        "command": "copilotLlmBridge.showLogs",
+        "title": "Copilot LLM Bridge: Show Logs"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "copilotLlmBridge",
+          "title": "Copilot LLM Bridge",
+          "icon": "media/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "copilotLlmBridge": [
+        {
+          "id": "copilotLlmBridge.panel",
+          "name": "Copilot LLM Bridge",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Copilot LLM Bridge",
+      "properties": {
+        "copilotLlmBridge.port": {
+          "type": "number",
+          "default": 4319,
+          "description": "Port the local OpenAI-compatible server listens on (127.0.0.1 only)."
+        },
+        "copilotLlmBridge.vendor": {
+          "type": "string",
+          "default": "copilot",
+          "description": "vscode.lm model vendor to select from, e.g. \"copilot\"."
+        },
+        "copilotLlmBridge.family": {
+          "type": "string",
+          "default": "",
+          "description": "Preferred model family (e.g. \"gpt-4o\", \"claude-3.5-sonnet\"). Empty picks whatever selectChatModels() returns first; use \"Select Model...\" to choose explicitly."
+        },
+        "copilotLlmBridge.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Start the bridge server automatically when VS Code opens this workspace. Off by default: the first model access must be user-initiated (a command), not silent, to trigger Copilot's own consent prompt correctly."
+        },
+        "copilotLlmBridge.sharedSecret": {
+          "type": "string",
+          "default": "",
+          "description": "Optional bearer token other local processes must send (Authorization: Bearer <token>) to use the bridge. Empty disables the check. The server only ever binds to 127.0.0.1 regardless."
+        },
+        "copilotLlmBridge.remoteTargets": {
+          "type": "array",
+          "default": [],
+          "description": "Other VS Code+Copilot instances' own Copilot LLM Bridge endpoints, reachable from this one's @remote chat participant.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "baseUrl"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Short name used to pick this target, e.g. \"@remote @work ...\" when more than one is configured."
+              },
+              "baseUrl": {
+                "type": "string",
+                "description": "The other instance's bridge base URL, e.g. http://127.0.0.1:4319/v1 (same-machine) or a tunnelled/tailnet URL for a different machine."
+              },
+              "sharedSecret": {
+                "type": "string",
+                "description": "Matches that instance's own copilotLlmBridge.sharedSecret, if it set one."
+              }
+            }
+          }
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "copilotLlmBridge.start"
+        },
+        {
+          "command": "copilotLlmBridge.stop"
+        },
+        {
+          "command": "copilotLlmBridge.selectModel"
+        },
+        {
+          "command": "copilotLlmBridge.copyBaseUrl"
+        },
+        {
+          "command": "copilotLlmBridge.showLogs"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "node esbuild.mjs --production",
+    "typecheck": "tsc --noEmit -p .",
+    "package:vsix": "npm run package && node ./node_modules/@vscode/vsce/vsce package --out dist/copilot-llm-bridge.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.4"
+  }
+}

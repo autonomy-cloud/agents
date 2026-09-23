@@ -1,0 +1,305 @@
+:root {
+  --cm-radius-lg: 14px;
+  --cm-radius-md: 10px;
+  --cm-radius-sm: 7px;
+  --cm-gap: 14px;
+  --cm-accent: #8b7cf6;
+  --cm-accent-soft: rgba(139, 124, 246, 0.16);
+  --cm-live: #3fd68a;
+  --cm-pending: #f5b942;
+  --cm-font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', var(--vscode-font-family, sans-serif);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--cm-font);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Topbar */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.2));
+  background: var(--vscode-sideBar-background, transparent);
+}
+
+.room-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.dot--live {
+  background: var(--cm-live);
+  box-shadow: 0 0 0 3px rgba(63, 214, 138, 0.18);
+}
+
+.dot--pending {
+  background: var(--cm-pending);
+  box-shadow: 0 0 0 3px rgba(245, 185, 66, 0.18);
+}
+
+.room-meta h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.status-label {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #9098a3);
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--cm-radius-sm);
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.08));
+  color: var(--vscode-editor-foreground);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: var(--cm-accent-soft);
+  border-color: var(--cm-accent);
+}
+
+.icon-btn--off {
+  background: rgba(235, 87, 87, 0.14);
+  border-color: rgba(235, 87, 87, 0.4);
+  color: #eb5757;
+}
+
+/* Stage */
+.stage {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.video-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--cm-gap);
+  padding: var(--cm-gap);
+  align-content: start;
+  overflow-y: auto;
+}
+
+.tile {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--cm-radius-lg);
+  overflow: hidden;
+  background: linear-gradient(160deg, rgba(139, 124, 246, 0.14), rgba(128, 128, 128, 0.06));
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.18));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.tile--coworker {
+  background: linear-gradient(160deg, rgba(139, 124, 246, 0.28), rgba(63, 214, 138, 0.08));
+  border-color: rgba(139, 124, 246, 0.5);
+}
+
+.tile__media {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tile__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: white;
+  background: linear-gradient(135deg, var(--cm-accent), #5b8def);
+}
+
+.tile__label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
+  color: #fff;
+}
+
+.badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.badge--coworker {
+  background: var(--cm-accent);
+  color: white;
+}
+
+/* Side panel */
+.side-panel {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.2));
+  background: var(--vscode-sideBar-background, transparent);
+}
+
+.side-panel__header {
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vscode-descriptionForeground, #9098a3);
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.15));
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--cm-radius-md);
+  background: rgba(128, 128, 128, 0.08);
+  max-width: 100%;
+}
+
+.chat-msg--self {
+  background: var(--cm-accent-soft);
+  align-self: flex-end;
+}
+
+.chat-msg--coworker {
+  background: rgba(63, 214, 138, 0.12);
+  border: 1px solid rgba(63, 214, 138, 0.3);
+}
+
+.chat-msg__from {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--vscode-descriptionForeground, #9098a3);
+}
+
+.chat-msg__text {
+  font-size: 12.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.15));
+}
+
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--cm-radius-sm);
+  border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.3));
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-family: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+
+.chat-input:focus {
+  border-color: var(--cm-accent);
+}
+
+.send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--cm-radius-sm);
+  border: none;
+  background: var(--cm-accent);
+  color: white;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.send-btn:hover {
+  filter: brightness(1.08);
+}

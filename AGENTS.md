@@ -133,6 +133,83 @@ incoming audio back into the LiveKit room) — see
 `openagents-teams-bridge/ABSORBED.md` for how the audio bridging actually
 works, and its licensing caveat.
 
+### VS Code extensions: coworker-meet and copilot-llm-bridge
+
+Two independent VS Code extensions live under `runtime/components/`,
+alongside everything else:
+
+| Component | What it is |
+| --- | --- |
+| `coworker-meet` | Join a real LiveKit meeting from inside VS Code, with `openagents-coworker` (Anika) actually in the room. Also registers Anika as a real VS Code chat session (Chat view / Agents Window), via the proposed `chatSessionsProvider` API. |
+| `copilot-llm-bridge` | Exposes VS Code's Language Model API (GitHub Copilot's chat models, from inside the editor) as a local OpenAI-compatible HTTP endpoint — an alternative `OPENAGENTS_OPENAI_BASE_URL` source for orgs where the only model access is an enterprise Copilot license. Its `@remote` chat participant can also forward a prompt to *another* VS Code+Copilot instance's own bridge and stream the reply back. |
+
+Each is a standalone npm package (own `package.json`, own build), not
+wired into `dev-up.sh`. See each package's own `README.md` for full
+architecture; the proposed-API stability caveat mentioned there (Insiders,
+or `--enable-proposed-api autonomy-cloud.coworker-meet`, needed for
+`coworker-meet`'s chat-session registration specifically) still applies
+below.
+
+#### Option A: F5 dev host (fastest iteration loop)
+
+```bash
+cd runtime/components/coworker-meet   # or copilot-llm-bridge
+npm install
+npm run watch   # keeps rebuilding on save
+```
+
+Then open that folder in VS Code and press **F5** to launch an Extension
+Development Host with it loaded. Reload that window (`Developer: Reload
+Window`) to pick up rebuilds instead of restarting F5 each time.
+
+#### Option B: real install, end to end (package → install → use)
+
+This is what actually ends up in your normal VS Code, not a throwaway dev
+host window:
+
+```bash
+cd runtime/components/coworker-meet   # repeat the same for copilot-llm-bridge
+npm install
+npm run package:vsix        # tsc + esbuild --production, then vsce package
+                             # -> dist/coworker-meet.vsix (~170KB; only
+                             #    package.json/dist/media get packaged, see
+                             #    .vscodeignore -- everything else is a
+                             #    build input, not shipped)
+code --install-extension dist/coworker-meet.vsix
+```
+
+Repeat for `copilot-llm-bridge` (`dist/copilot-llm-bridge.vsix`). Reinstalling
+after a change is the same two commands again — `code --install-extension`
+overwrites the previous version in place, no uninstall step needed.
+
+Verify both actually installed:
+
+```bash
+code --list-extensions | grep autonomy-cloud
+# autonomy-cloud.coworker-meet
+# autonomy-cloud.copilot-llm-bridge
+```
+
+Then, to actually use them:
+
+- **`copilot-llm-bridge`**: open the "Copilot LLM Bridge" activity-bar
+  panel, click **Start** (first run triggers Copilot's own consent
+  prompt), then **Copy Base URL** and point
+  `OPENAGENTS_OPENAI_BASE_URL` at it (default
+  `http://127.0.0.1:4319/v1`) -- see "Optional: giving Anika a
+  Copilot-backed LLM" above.
+- **`coworker-meet`**: run **Coworker Meet: Join Meeting** from the Command
+  Palette to open the meeting webview panel directly, or **Coworker Meet:
+  Open Coworker Window** for the chat-session version (Chat view / Agents
+  Window). The chat-session registration specifically needs the
+  proposed-API flag: quit VS Code fully and relaunch with
+  `code --enable-proposed-api autonomy-cloud.coworker-meet` (a flag passed
+  to an *already-running* instance's CLI is ignored -- it only takes
+  effect at process launch) -- or use VS Code Insiders, which doesn't
+  require the flag at all. Without either, `coworker-meet` still works
+  fine for **Join Meeting** (the plain webview panel); only the chat
+  session won't register.
+
 ### Known environment gotchas (already worked around in `dev-up.sh`, documented here so they're not mistaken for new bugs)
 
 - **This checkout's path contains `:`** (`.../github.com:autonomy-cloud/`),

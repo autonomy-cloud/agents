@@ -1,0 +1,164 @@
+{
+  "name": "coworker-meet",
+  "displayName": "Coworker Meet",
+  "description": "Join LiveKit meetings and bring an OpenAgents-powered digital coworker into the room, without leaving VS Code.",
+  "version": "0.1.0",
+  "publisher": "autonomy-cloud",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/autonomy-cloud/agents",
+    "directory": "runtime/components/coworker-meet"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "enabledApiProposals": [
+    "chatSessionsProvider"
+  ],
+  "contributes": {
+    "chatSessions": [
+      {
+        "type": "anika-coworker",
+        "name": "Anika",
+        "displayName": "Anika (Coworker)",
+        "description": "Your digital coworker, live in a real LiveKit room -- not a simulated chat.",
+        "when": "true"
+      }
+    ],
+    "commands": [
+      {
+        "command": "coworkerMeet.openMeeting",
+        "title": "Coworker Meet: Join Meeting",
+        "icon": "$(broadcast)"
+      },
+      {
+        "command": "coworkerMeet.leaveMeeting",
+        "title": "Coworker Meet: Leave Meeting",
+        "icon": "$(call-outgoing)"
+      },
+      {
+        "command": "coworkerMeet.setApiSecret",
+        "title": "Coworker Meet: Set API Secret"
+      },
+      {
+        "command": "coworkerMeet.openCoworkerWindow",
+        "title": "Coworker Meet: Open Coworker Window",
+        "icon": "$(multiple-windows)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "coworkerMeet",
+          "title": "Coworker Meet",
+          "icon": "media/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "coworkerMeet": [
+        {
+          "id": "coworkerMeet.panel",
+          "name": "Coworker Meet",
+          "icon": "media/activity-icon.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "coworkerMeet.panel",
+        "contents": "Join a meeting and bring your OpenAgents digital coworker into the room. No account needed — a local meeting server starts automatically.\n[Join Meeting](command:coworkerMeet.openMeeting)\nWant to use your own LiveKit deployment instead? Set coworkerMeet.mode to \"advanced\" in Settings, then [Set API Secret](command:coworkerMeet.setApiSecret)."
+      }
+    ],
+    "configuration": {
+      "title": "Coworker Meet",
+      "properties": {
+        "coworkerMeet.mode": {
+          "type": "string",
+          "enum": [
+            "embedded",
+            "advanced"
+          ],
+          "enumDescriptions": [
+            "Zero-config (default): runs a bundled OpenAgents/LiveKit server locally, no account or API key needed.",
+            "Bring your own LiveKit deployment: requires livekitUrl, apiKey, and apiSecret below."
+          ],
+          "default": "embedded",
+          "description": "How Coworker Meet reaches a LiveKit room server."
+        },
+        "coworkerMeet.livekitUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Advanced mode only: LiveKit server WebSocket URL, e.g. wss://your-project.livekit.cloud"
+        },
+        "coworkerMeet.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Advanced mode only: LiveKit API key, used only locally to mint room access tokens."
+        },
+        "coworkerMeet.apiSecret": {
+          "type": "string",
+          "default": "",
+          "description": "Advanced mode only: LiveKit API secret, used only locally to mint room access tokens. Prefer storing this via 'Coworker Meet: Set API Secret' (SecretStorage) instead of settings.json."
+        },
+        "coworkerMeet.roomName": {
+          "type": "string",
+          "default": "coworker-standup",
+          "description": "Default LiveKit room name to join."
+        },
+        "coworkerMeet.displayName": {
+          "type": "string",
+          "default": "",
+          "description": "Display name to use when joining as yourself. Defaults to your OS username."
+        },
+        "coworkerMeet.coworkerIdentity": {
+          "type": "string",
+          "default": "anika-coworker",
+          "description": "Participant identity reserved for the OpenAgents digital coworker in this room."
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "coworkerMeet.openMeeting"
+        },
+        {
+          "command": "coworkerMeet.leaveMeeting"
+        },
+        {
+          "command": "coworkerMeet.setApiSecret"
+        },
+        {
+          "command": "coworkerMeet.openCoworkerWindow"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "node esbuild.mjs --production",
+    "typecheck": "tsc --noEmit -p .",
+    "package:vsix": "npm run package && node ./node_modules/@vscode/vsce/vsce package --out dist/coworker-meet.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.4",
+    "vscode-dts": "^0.3.3"
+  },
+  "dependencies": {
+    "livekit-client": "^2.22.3",
+    "livekit-server-sdk": "^2.19.1"
+  }
+}

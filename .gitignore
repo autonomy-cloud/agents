@@ -181,3 +181,8 @@ docs/
 # Examples for development
 examples/dev/*
 .env.teams-bridge
+
+# coworker-meet's prebuilt embedded server binary is a local build artifact
+# (see runtime/components/coworker-meet/scripts/build-server.mjs)
+runtime/components/coworker-meet/bin/
+*.vsix
