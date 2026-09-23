@@ -15,7 +15,8 @@ from openagents.agents.log import logger
 from openagents.plugins import openai, silero
 
 from .agent import Anika
-from .config import ModelConfig, WorkerConnectionConfig
+from .config import MCPConfig, ModelConfig, WorkerConnectionConfig
+from .mcp_tools import build_mcp_toolsets
 
 VAD_USERDATA_KEY = "anika_vad"
 
@@ -55,7 +56,12 @@ async def entrypoint(ctx: JobContext) -> None:
         tts=tts,
     )
 
-    await session.start(agent=Anika(), room=ctx.room)
+    # A fresh set of toolsets per job: each MCPServerStdio spawns its own
+    # subprocess, and toolset setup()/teardown is handled automatically by
+    # the framework as part of this Agent's lifecycle (see agent_activity.py).
+    mcp_toolsets = build_mcp_toolsets(MCPConfig.from_env())
+
+    await session.start(agent=Anika(tools=mcp_toolsets), room=ctx.room)
 
 
 def make_on_request(connection: WorkerConnectionConfig) -> Callable[[JobRequest], Awaitable[None]]:

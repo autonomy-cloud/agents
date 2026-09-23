@@ -80,6 +80,26 @@ class ModelConfig:
         )
 
 
+@dataclass(frozen=True)
+class MCPConfig:
+    """Which MCP (Model Context Protocol) tool servers Anika should connect
+    to, in addition to her own persona/instructions. Every field is opt-in
+    (``None`` by default) -- unset means "don't add this server's tools",
+    not "use some public default".
+    """
+
+    github_token: str | None
+
+    @classmethod
+    def from_env(cls) -> MCPConfig:
+        return cls(
+            # GITHUB_PERSONAL_ACCESS_TOKEN matches the env var name
+            # github/github-mcp-server itself expects, so a token copied
+            # from GitHub's own docs/VS Code's mcp.json works unmodified.
+            github_token=os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN") or None,
+        )
+
+
 def validate_model_config_early() -> None:
     """Fail fast, at process startup, if the model endpoint is not configured.
 

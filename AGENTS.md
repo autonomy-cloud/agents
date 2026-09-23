@@ -133,6 +133,52 @@ incoming audio back into the LiveKit room) — see
 `openagents-teams-bridge/ABSORBED.md` for how the audio bridging actually
 works, and its licensing caveat.
 
+### Optional: giving Anika a Copilot-backed LLM via the Copilot LLM Bridge extension
+
+A separate, sibling repo — `autonomy-cloud/coworker-meet-extension` — is a
+small monorepo of VS Code extensions; its `copilot-llm-bridge/` package
+exposes VS Code's official Language Model API (`vscode.lm`, i.e. GitHub
+Copilot's chat models from inside the editor) as a local OpenAI-compatible
+HTTP endpoint. This is an alternative to `OPENAGENTS_OPENAI_BASE_URL`
+pointing at a real internal OpenAI-compatible endpoint, useful when the only
+model access available is through an enterprise Copilot license. See that
+package's own `README.md` for the full rationale (and why it's meaningfully
+different from — and safer than — a Copilot-API-token-replay proxy). The
+same repo's `coworker-meet/` package is also worth knowing about: it joins
+`openagents-coworker` into a real LiveKit room from inside VS Code, and
+registers Anika as a real VS Code chat session (Chat view / Agents Window).
+
+To install and use the bridge:
+
+```bash
+cd ../coworker-meet-extension/copilot-llm-bridge   # sibling of this repo, under the same autonomy-cloud org root
+npm install
+npm run build
+```
+
+Then in VS Code: `Extensions` view → `...` menu → **Install from VSIX...**
+is for a packaged build; for local development instead open the
+`copilot-llm-bridge` folder (not the repo root -- it's a monorepo of
+independent packages) in VS Code and press **F5** to launch an Extension
+Development Host with it loaded. Once running there:
+
+1. Run **Copilot LLM Bridge: Start** from the Command Palette (or the
+   activity bar panel's Start button) — this is a user-initiated action on
+   purpose, so Copilot's own consent prompt attaches correctly.
+2. Run **Copilot LLM Bridge: Copy Base URL** (default
+   `http://127.0.0.1:4319/v1`).
+3. Point `openagents-coworker` at it instead of a real internal endpoint:
+
+   ```bash
+   export OPENAGENTS_OPENAI_BASE_URL=http://127.0.0.1:4319/v1
+   export OPENAGENTS_OPENAI_API_KEY=unused
+   ```
+
+VS Code must stay open with the extension active for requests to be served
+— there's no persistent background process once it closes. See that repo's
+README for the known limitations (no system-role support upstream, no
+OpenAI-style function/tool-calling translation, no token usage accounting).
+
 ### Known environment gotchas (already worked around in `dev-up.sh`, documented here so they're not mistaken for new bugs)
 
 - **This checkout's path contains `:`** (`.../github.com:autonomy-cloud/`),
