@@ -14,6 +14,8 @@ must not download components or model files.
 | libyuv | `917276084a49be726c90292ff0a6b0a3d571a6af` | Native YUV processing |
 | libwebrtc | `webrtc-51ef663` | Pinned native WebRTC archive/build input |
 | Console UI baseline (agents-playground, Apache-2.0) | `2a2d1dbe3317100366bc86f53f253b59394dca3c` | Rebranded/redesigned web console, absorbed into `openagents-console` — see `openagents-console/ABSORBED.md` |
+| Desktop orchestration baseline (portabledesktop, MIT) | `6d29d49a2f268ca7fab93826878bf9ea8dda015d` | Xvnc-backed desktop session start/stop, absorbed into `openagents-workstation/internal/pd` |
+| LiveKit server SDK baseline (server-sdk-go, Apache-2.0) | `2088dabd34424add79fd0baab2112c348838fd33` | Go room/track-publishing client, vendored into `openagents-workstation/vendor` |
 
 Apache-2.0 license and notice files from each upstream component are preserved
 inside its component directory. A release build must also generate an SBOM and
@@ -29,3 +31,11 @@ third-party license inventory for vendored Python, Go, and Rust dependencies.
 - `runtime/vendor/libwebrtc/`: the pinned native WebRTC release archive. Its
   published SHA-256 is
   `f9be49b9fee9cd1588da8a40c85bda21f5ea49c4ed82662dc889b1c919569a08`.
+- `openagents-workstation/vendor/`: Go module graph (server-sdk-go,
+  pion/webrtc, livekit/protocol, and their transitive deps); build with
+  `-mod=vendor`. The `coder/portabledesktop` orchestration source is not a
+  Go module dependency (its packages are `internal/`, so Go cannot import
+  it externally) — it is instead absorbed by copy into
+  `openagents-workstation/internal/pd`. VP8 encoding links dynamically
+  against the system `libvpx` package (BSD-licensed) via cgo; no libvpx
+  source is vendored.
