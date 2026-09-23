@@ -372,6 +372,29 @@ func (h *AgentHandler) deregisterWorker(w *agent.Worker) {
 	}
 }
 
+// DebugInfo reports every currently-registered worker, keyed by the agent
+// name it was registered under. Used by the /debug/agents dev-mode HTTP
+// route so a UI (e.g. openagents-console) can populate an agent-name
+// dropdown from real, currently-connected workers instead of a static list.
+func (h *AgentHandler) DebugInfo() []map[string]any {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	info := make([]map[string]any, 0, len(h.workers))
+	for _, w := range h.workers {
+		info = append(info, map[string]any{
+			"id":          w.ID,
+			"agentName":   w.AgentName,
+			"namespace":   w.Namespace,
+			"jobType":     w.JobType.String(),
+			"status":      w.Status().String(),
+			"load":        w.Load(),
+			"runningJobs": w.RunningJobCount(),
+		})
+	}
+	return info
+}
+
 func (h *AgentHandler) deregisterJob(jobID livekit.JobID) {
 	h.agentServer.DeregisterJobTerminateTopic(string(jobID))
 
