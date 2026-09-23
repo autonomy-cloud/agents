@@ -1,0 +1,1378 @@
+import asyncio
+import copy
+import datetime
+import hashlib
+import json
+import logging
+import os
+import signal
+import subprocess
+import threading
+import time
+from time import sleep
+from urllib.parse import urlparse
+
+import numpy as np
+from django.conf import settings
+from pyvirtualdisplay import Display
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from websockets.exceptions import ConnectionClosed
+from websockets.sync.client import connect
+from websockets.sync.server import serve
+
+from bots.automatic_leave_configuration import AutomaticLeaveConfiguration
+from bots.automatic_leave_utils import participant_is_another_bot
+from bots.bot_adapter import BotAdapter
+from bots.models import ParticipantEventTypes, RecordingViews
+from bots.per_participant_realtime_video_configuration import PerParticipantRealtimeVideoConfiguration
+from bots.room_sync_source_participant_configuration import RoomSyncSourceParticipantConfiguration
+from bots.room_sync_utils import add_bot_indicator_to_display_name
+from bots.utils import half_ceil, mask_url_query_param_values, scale_i420
+
+from .debug_screen_recorder import DebugScreenRecorder
+from .livekit_websocket_bridge import LiveKitWebsocketBridge
+from .ui_methods import UiAuthorizedUserNotInMeetingTimeoutExceededException, UiBlockedByCaptchaException, UiCouldNotJoinMeetingWaitingForHostException, UiCouldNotJoinMeetingWaitingRoomTimeoutException, UiIncorrectPasswordException, UiInfinitelyRetryableException, UiLoginAttemptFailedException, UiLoginRequiredException, UiMeetingNotFoundException, UiRequestToJoinDeniedException, UiRetryableException, UiRetryableExpectedException
+
+logger = logging.getLogger(__name__)
+
+
+class WebBotAdapter(BotAdapter):
+    def __init__(
+        self,
+        *,
+        display_name,
+        send_message_callback,
+        meeting_url,
+        add_video_frame_callback,
+        wants_any_video_frames_callback,
+        add_audio_chunk_callback,
+        add_mixed_audio_chunk_callback,
+        add_per_participant_video_frame_callback,
+        add_encoded_mp4_chunk_callback,
+        upsert_caption_callback,
+        upsert_chat_message_callback,
+        add_participant_event_callback,
+        automatic_leave_configuration: AutomaticLeaveConfiguration,
+        per_participant_realtime_video_configuration: PerParticipantRealtimeVideoConfiguration,
+        recording_view: RecordingViews,
+        should_create_debug_recording: bool,
+        start_recording_screen_callback,
+        stop_recording_screen_callback,
+        video_frame_size: tuple[int, int],
+        record_chat_messages_when_paused: bool,
+        disable_incoming_video: bool,
+        record_participant_speech_start_stop_events: bool,
+        room_sync_source_participant_configuration: RoomSyncSourceParticipantConfiguration | None,
+    ):
+        self.display_name = display_name if not room_sync_source_participant_configuration else add_bot_indicator_to_display_name(display_name)
+        self.send_message_callback = send_message_callback
+        self.add_audio_chunk_callback = add_audio_chunk_callback
+        self.add_mixed_audio_chunk_callback = add_mixed_audio_chunk_callback
+        self.add_video_frame_callback = add_video_frame_callback
+        self.wants_any_video_frames_callback = wants_any_video_frames_callback
+        self.add_per_participant_video_frame_callback = add_per_participant_video_frame_callback
+        self.add_encoded_mp4_chunk_callback = add_encoded_mp4_chunk_callback
+        self.upsert_caption_callback = upsert_caption_callback
+        self.upsert_chat_message_callback = upsert_chat_message_callback
+        self.add_participant_event_callback = add_participant_event_callback
+        self.start_recording_screen_callback = start_recording_screen_callback
+        self.stop_recording_screen_callback = stop_recording_screen_callback
+        self.recording_view = recording_view
+        self.record_chat_messages_when_paused = record_chat_messages_when_paused
+        self.disable_incoming_video = disable_incoming_video
+        self.record_participant_speech_start_stop_events = record_participant_speech_start_stop_events
+        self.meeting_url = meeting_url
+
+        # This is an internal ID that comes from the platform. It is currently only used for MS Teams.
+        self.meeting_uuid = None
+
+        self.video_frame_size = video_frame_size
+
+        self.driver = None
+
+        self.send_frames = True
+
+        self.left_meeting = False
+        self.was_removed_from_meeting = False
+        self.remover = None
+        self.cleaned_up = False
+
+        self.websocket_port = None
+        self.websocket_server = None
+        self.websocket_thread = None
+        self.last_websocket_message_processed_time = None
+        self.last_media_message_processed_time = None
+        self.last_audio_message_processed_time = None
+        self.first_buffer_timestamp_ms_offset = time.time() * 1000
+        self.media_sending_enable_timestamp_ms = None
+        self.last_domain_allow_list_violation_check_time = time.time()
+        self.domains_seen_by_domain_allow_list_listener = set()
+        self.domains_seen_by_domain_allow_list_listener_where_navigation_failed = set()
+        self.domains_seen_by_domain_allow_list_listener_where_domain_was_not_in_allow_list = set()
+
+        self.participants_info = {}
+        self.only_one_participant_in_meeting_at = None
+        self.video_frame_ticker = 0
+
+        self.automatic_leave_configuration = automatic_leave_configuration
+        self.per_participant_realtime_video_configuration = per_participant_realtime_video_configuration
+        self.room_sync_source_participant_configuration = room_sync_source_participant_configuration
+        self.livekit_websocket_bridge = self.create_livekit_websocket_bridge()
+
+        self.should_create_debug_recording = should_create_debug_recording
+        self.debug_screen_recorder = None
+
+        self.silence_detection_activated = False
+        self.joined_at = None
+        self.recording_permission_granted_at = None
+
+        self.ready_to_send_chat_messages = False
+
+        self.recording_paused = False
+
+    def pause_recording(self):
+        self.recording_paused = True
+
+    def start_or_resume_recording(self):
+        self.recording_paused = False
+
+    def process_encoded_mp4_chunk(self, message):
+        if self.recording_paused:
+            return
+
+        self.last_media_message_processed_time = time.time()
+        if len(message) > 4:
+            encoded_mp4_data = message[4:]
+            logger.info(f"encoded mp4 data length {len(encoded_mp4_data)}")
+            self.add_encoded_mp4_chunk_callback(encoded_mp4_data)
+
+    def get_participant(self, participant_id):
+        if participant_id in self.participants_info:
+            return {
+                "participant_uuid": participant_id,
+                "participant_full_name": self.participants_info[participant_id]["fullName"],
+                "participant_user_uuid": None,
+                "participant_is_the_bot": self.participants_info[participant_id]["isCurrentUser"],
+                "participant_is_host": self.participants_info[participant_id].get("isHost", False),
+            }
+
+        return None
+
+    def meeting_uuid_mismatch(self, user):
+        # If no meeting id was provided, then don't try to detect a mismatch
+        if not user.get("meetingId"):
+            return False
+
+        # If the meeting uuid is not set, then set it to the user's meeting id
+        if not self.meeting_uuid:
+            self.meeting_uuid = user.get("meetingId")
+            logger.info(f"meeting_uuid set to {self.meeting_uuid} for user {user}")
+            return False
+
+        if self.meeting_uuid != user.get("meetingId"):
+            logger.info(f"meeting_uuid mismatch detected. meeting_uuid: {self.meeting_uuid} user_meeting_id: {user.get('meetingId')} for user {user}")
+            return True
+
+        return False
+
+    def handle_participant_update(self, user):
+        if self.meeting_uuid_mismatch(user):
+            return
+
+        user_before = self.participants_info.get(user["deviceId"], {"active": False})
+        self.participants_info[user["deviceId"]] = user
+
+        if user_before.get("active") and not user["active"]:
+            self.add_participant_event_callback({"participant_uuid": user["deviceId"], "event_type": ParticipantEventTypes.LEAVE, "event_data": {}, "timestamp_ms": int(time.time() * 1000)})
+            return
+
+        if not user_before.get("active") and user["active"]:
+            self.add_participant_event_callback({"participant_uuid": user["deviceId"], "event_type": ParticipantEventTypes.JOIN, "event_data": {}, "timestamp_ms": int(time.time() * 1000)})
+            return
+
+        if bool(user_before.get("isHost")) != bool(user.get("isHost")):
+            changes = {
+                "isHost": {
+                    "before": user_before.get("isHost"),
+                    "after": user.get("isHost"),
+                }
+            }
+            self.add_participant_event_callback({"participant_uuid": user["deviceId"], "event_type": ParticipantEventTypes.UPDATE, "event_data": changes, "timestamp_ms": int(time.time() * 1000)})
+            return
+
+    def process_video_frame(self, message):
+        if self.recording_paused:
+            return
+
+        self.last_media_message_processed_time = time.time()
+        if len(message) > 24:  # Minimum length check
+            # Bytes 4-12 contain the timestamp
+            timestamp = int.from_bytes(message[4:12], byteorder="little")
+
+            # Get stream ID length and string
+            stream_id_length = int.from_bytes(message[12:16], byteorder="little")
+            message[16 : 16 + stream_id_length].decode("utf-8")
+
+            # Get width and height after stream ID
+            offset = 16 + stream_id_length
+            width = int.from_bytes(message[offset : offset + 4], byteorder="little")
+            height = int.from_bytes(message[offset + 4 : offset + 8], byteorder="little")
+
+            # Keep track of the video frame dimensions
+            if self.video_frame_ticker % 300 == 0:
+                logger.info(f"video dimensions {width} {height} message length {len(message) - offset - 8}")
+            self.video_frame_ticker += 1
+
+            # Scale frame to video frame size
+            expected_video_data_length = width * height + 2 * half_ceil(width) * half_ceil(height)
+            video_data = np.frombuffer(message[offset + 8 :], dtype=np.uint8)
+
+            # Check if len(video_data) does not agree with width and height
+            if len(video_data) == expected_video_data_length:  # I420 format uses 1.5 bytes per pixel
+                scaled_i420_frame = scale_i420(video_data, (width, height), self.video_frame_size)
+                if self.wants_any_video_frames_callback() and self.send_frames:
+                    self.add_video_frame_callback(scaled_i420_frame, timestamp * 1000)
+
+            else:
+                logger.info(f"video data length does not agree with width and height {len(video_data)} {width} {height}")
+
+    def process_mixed_audio_frame(self, message):
+        if self.recording_paused:
+            return
+
+        self.last_media_message_processed_time = time.time()
+        if len(message) > 12:
+            # Convert the float32 audio data to numpy array
+            audio_data = np.frombuffer(message[4:], dtype=np.float32)
+
+            # Convert float32 to PCM 16-bit by multiplying by 32768.0
+            audio_data = (audio_data * 32768.0).astype(np.int16)
+
+            # Only mark last_audio_message_processed_time if the audio data has at least one non-zero value
+            if np.any(audio_data):
+                self.last_audio_message_processed_time = time.time()
+
+            if (self.wants_any_video_frames_callback is None or self.wants_any_video_frames_callback()) and self.send_frames:
+                self.add_mixed_audio_chunk_callback(chunk=audio_data.tobytes())
+
+    def process_per_participant_audio_frame(self, message):
+        if self.recording_paused:
+            return
+
+        self.last_media_message_processed_time = time.time()
+        if len(message) > 12:
+            # Byte 5 contains the participant ID length
+            participant_id_length = int.from_bytes(message[4:5], byteorder="little")
+            participant_id = message[5 : 5 + participant_id_length].decode("utf-8")
+
+            # Convert the float32 audio data to numpy array
+            audio_data = np.frombuffer(message[(5 + participant_id_length) :], dtype=np.float32)
+
+            # Convert float32 to PCM 16-bit by multiplying by 32768.0
+            audio_data = (audio_data * 32768.0).astype(np.int16)
+
+            self.add_audio_chunk_callback(participant_id, datetime.datetime.utcnow(), audio_data.tobytes())
+
+    def process_per_participant_video_frame(self, message):
+        if self.recording_paused:
+            return
+
+        self.last_media_message_processed_time = time.time()
+        if len(message) > 12:
+            # Byte 5 contains the participant ID length
+            participant_id_length = int.from_bytes(message[4:5], byteorder="little")
+            participant_id = message[5 : 5 + participant_id_length].decode("utf-8")
+
+            # After the participant ID, the source is the next byte
+            source_raw = message[5 + participant_id_length]
+            source = "webcam" if source_raw == 0 else "screenshare"
+
+            # Get the video frame
+            video_frame = message[5 + participant_id_length + 1 :]
+
+            self.add_per_participant_video_frame_callback(video_frame, participant_id, source)
+
+    def number_of_participants_ever_in_meeting_excluding_other_bots(self):
+        return len([participant for participant in self.participants_info.values() if not participant_is_another_bot(participant["fullName"], participant["isCurrentUser"], self.automatic_leave_configuration)])
+
+    def update_only_one_participant_in_meeting_at(self):
+        if not self.joined_at:
+            return
+
+        # If nobody (excluding other bots) other than the bot was ever in the meeting, then don't activate this. We only want to activate if someone else was in the meeting and left
+        if self.number_of_participants_ever_in_meeting_excluding_other_bots() <= 1:
+            return
+
+        all_participants_in_meeting_excluding_other_bots = []
+        other_bots_in_meeting_names = []
+        for participant in self.participants_info.values():
+            if not participant["active"]:
+                continue
+            if not participant_is_another_bot(participant["fullName"], participant["isCurrentUser"], self.automatic_leave_configuration):
+                all_participants_in_meeting_excluding_other_bots.append(participant)
+            else:
+                other_bots_in_meeting_names.append(participant["fullName"])
+
+        if len(all_participants_in_meeting_excluding_other_bots) == 1 and all_participants_in_meeting_excluding_other_bots[0]["isCurrentUser"]:
+            if self.only_one_participant_in_meeting_at is None:
+                self.only_one_participant_in_meeting_at = time.time()
+                logger.info(f"only_one_participant_in_meeting_at set to {self.only_one_participant_in_meeting_at}. Ignoring other bots in meeting: {other_bots_in_meeting_names}")
+        else:
+            self.only_one_participant_in_meeting_at = None
+
+    def handle_remover_data(self, json_data):
+        # A meeting status change names the participant who removed us when it knows who that was.
+        if not json_data.get("remover"):
+            return
+
+        if self.meeting_uuid_mismatch(json_data):
+            return
+
+        self.remover = json_data["remover"]
+
+    def handle_removed_from_meeting(self):
+        self.left_meeting = True
+        self.send_message_callback({"message": self.Messages.MEETING_ENDED, "remover": self.remover})
+
+    def handle_meeting_ended(self, meeting_id):
+        # If a meeting id was passed in the meeting ended message and we have one on the backend, then
+        # only accept if they are equal
+        if meeting_id and self.meeting_uuid and meeting_id != self.meeting_uuid:
+            logger.info(f"meeting id mismatch in handle_meeting_ended. meeting_id from message: {meeting_id} self.meeting_uuid: {self.meeting_uuid}")
+            return
+
+        self.left_meeting = True
+        self.send_message_callback({"message": self.Messages.MEETING_ENDED, "remover": self.remover})
+
+    def handle_failed_to_join(self, reason):
+        logger.info(f"failed to join meeting with reason {reason}")
+        self.subclass_specific_handle_failed_to_join(reason)
+
+    def handle_caption_update(self, json_data):
+        if self.recording_paused:
+            return
+
+        # Count a caption as audio activity
+        self.last_audio_message_processed_time = time.time()
+        self.upsert_caption_callback(json_data["caption"])
+
+    def handle_participant_speech_start_stop_event(self, json_data):
+        self.add_participant_event_callback({"participant_uuid": json_data["participantId"], "event_type": ParticipantEventTypes.SPEECH_START if json_data["isSpeechStart"] else ParticipantEventTypes.SPEECH_STOP, "event_data": {}, "timestamp_ms": int(json_data["timestamp"])})
+
+    def handle_chat_message(self, json_data):
+        if self.recording_paused and not self.record_chat_messages_when_paused:
+            return
+
+        self.upsert_chat_message_callback(json_data)
+
+    def mask_transcript_if_required(self, json_data):
+        if not settings.MASK_TRANSCRIPT_IN_LOGS:
+            return json_data
+
+        json_data_masked = copy.deepcopy(json_data)
+        if json_data.get("caption") and json_data.get("caption").get("text"):
+            json_data_masked["caption"]["text"] = hashlib.sha256(json_data.get("caption").get("text").encode("utf-8")).hexdigest()
+        return json_data_masked
+
+    def create_livekit_websocket_bridge(self):
+        config = self.room_sync_source_participant_configuration
+        if config is None or not config.livekit:
+            return None
+        return LiveKitWebsocketBridge(livekit_url=config.livekit.url)
+
+    def handle_websocket_with_livekit_bridge(self, websocket):
+        request_path = LiveKitWebsocketBridge.get_websocket_request_path(websocket)
+        if self.livekit_websocket_bridge.is_bridge_path(request_path):
+            self.livekit_websocket_bridge.handle(websocket, request_path)
+            return
+        self.handle_websocket(websocket)
+
+    def handle_websocket(self, websocket):
+        audio_format = None
+
+        try:
+            for message in websocket:
+                # Get first 4 bytes as message type
+                message_type = int.from_bytes(message[:4], byteorder="little")
+
+                if message_type == 1:  # JSON
+                    json_data = json.loads(message[4:].decode("utf-8"))
+                    json_data_is_dict = isinstance(json_data, dict)
+
+                    if not json_data_is_dict:
+                        logger.warning("Received non-dict JSON message: %s (type: %s)", json_data, type(json_data).__name__)
+
+                    if json_data_is_dict:
+                        if json_data.get("type") == "CaptionUpdate":
+                            logger.info("Received JSON message: %s", self.mask_transcript_if_required(json_data))
+                        else:
+                            logger.info("Received JSON message: %s", json_data)
+
+                        if json_data.get("type") == "AudioFormatUpdate":
+                            audio_format = json_data["format"]
+                            logger.info(f"audio format {audio_format}")
+
+                        elif json_data.get("type") == "CaptionUpdate":
+                            self.handle_caption_update(json_data)
+
+                        elif json_data.get("type") == "ChatMessage":
+                            self.handle_chat_message(json_data)
+
+                        elif json_data.get("type") == "ParticipantSpeechStartStopEvent":
+                            self.handle_participant_speech_start_stop_event(json_data)
+
+                        elif json_data.get("type") == "UsersUpdate":
+                            for user in json_data["newUsers"]:
+                                user["active"] = user["humanized_status"] == "in_meeting"
+                                self.handle_participant_update(user)
+                            for user in json_data["removedUsers"]:
+                                user["active"] = False
+                                self.handle_participant_update(user)
+                            for user in json_data["updatedUsers"]:
+                                user["active"] = user["humanized_status"] == "in_meeting"
+                                self.handle_participant_update(user)
+
+                                if user["humanized_status"] == "removed_from_meeting" and user["isCurrentUser"]:
+                                    self.handle_removed_from_meeting()
+
+                            self.update_only_one_participant_in_meeting_at()
+
+                        elif json_data.get("type") == "SilenceStatus":
+                            if not json_data.get("isSilent"):
+                                self.last_audio_message_processed_time = time.time()
+
+                        elif json_data.get("type") == "ChatStatusChange":
+                            if json_data.get("change") == "ready_to_send":
+                                self.ready_to_send_chat_messages = True
+                                self.send_message_callback({"message": self.Messages.READY_TO_SEND_CHAT_MESSAGE})
+
+                        elif json_data.get("type") == "MeetingStatusChange":
+                            self.handle_remover_data(json_data)
+
+                            if json_data.get("change") == "removed_from_meeting":
+                                self.handle_removed_from_meeting()
+                            if json_data.get("change") == "meeting_ended":
+                                self.handle_meeting_ended(json_data.get("meetingId"))
+                            if json_data.get("change") == "failed_to_join":
+                                self.handle_failed_to_join(json_data.get("reason"))
+
+                        elif json_data.get("type") == "RecordingPermissionChange":
+                            if json_data.get("change") == "granted":
+                                self.after_bot_can_record_meeting()
+                            elif json_data.get("change") == "denied":
+                                self.after_bot_recording_permission_denied()
+
+                        elif json_data.get("type") == "ClosedCaptionStatusChange":
+                            if json_data.get("change") == "save_caption_not_allowed":
+                                self.could_not_enable_closed_captions()
+
+                elif message_type == 2:  # VIDEO
+                    self.process_video_frame(message)
+                elif message_type == 3:  # AUDIO
+                    self.process_mixed_audio_frame(message)
+                elif message_type == 4:  # ENCODED_MP4_CHUNK
+                    self.process_encoded_mp4_chunk(message)
+                elif message_type == 5:  # PER_PARTICIPANT_AUDIO
+                    self.process_per_participant_audio_frame(message)
+                elif message_type == 6:  # PER_PARTICIPANT_VIDEO
+                    self.process_per_participant_video_frame(message)
+
+                self.last_websocket_message_processed_time = time.time()
+        except Exception as e:
+            logger.info(f"Websocket error: {e}")
+            raise e
+
+    def run_websocket_server(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        websocket_handler = self.handle_websocket if self.livekit_websocket_bridge is None else self.handle_websocket_with_livekit_bridge
+
+        port = self.get_websocket_port()
+        max_retries = 10
+
+        for attempt in range(max_retries):
+            try:
+                self.websocket_server = serve(
+                    websocket_handler,
+                    "localhost",
+                    port,
+                    compression=None,
+                    max_size=None,
+                )
+                logger.info(f"Websocket server started on ws://localhost:{port}")
+                self.websocket_port = port
+                self.websocket_server.serve_forever()
+                break
+            except OSError as e:
+                if e.errno == 98:  # Address already in use
+                    logger.info(f"Port {port} is already in use, trying next port...")
+                    port += 1
+                    if attempt == max_retries - 1:
+                        raise Exception(f"Could not find available port after {max_retries} attempts")
+                    continue
+                raise  # Re-raise other OSErrors
+
+    def send_request_to_join_denied_message(self):
+        self.send_message_callback({"message": self.Messages.REQUEST_TO_JOIN_DENIED, "remover": self.remover})
+
+    def send_meeting_not_found_message(self):
+        self.send_message_callback({"message": self.Messages.MEETING_NOT_FOUND})
+
+    def send_login_required_message(self):
+        self.send_message_callback({"message": self.Messages.LOGIN_REQUIRED})
+
+    def capture_screenshot_and_mhtml_file(self):
+        # Take a screenshot and mhtml file of the page, because it is helpful to have for debugging
+        current_time = datetime.datetime.now()
+        timestamp = current_time.strftime("%Y%m%d_%H%M%S")
+        screenshot_path = f"/tmp/ui_element_not_found_{timestamp}.png"
+        try:
+            self.driver.save_screenshot(screenshot_path)
+        except Exception as e:
+            logger.warning(f"Error saving screenshot: {e}")
+            screenshot_path = None
+
+        mhtml_file_path = f"/tmp/page_snapshot_{timestamp}.mhtml"
+        try:
+            result = self.driver.execute_cdp_cmd("Page.captureSnapshot", {})
+            mhtml_bytes = result["data"]  # Extract the data from the response dictionary
+            with open(mhtml_file_path, "w", encoding="utf-8") as f:
+                f.write(mhtml_bytes)
+        except Exception as e:
+            logger.warning(f"Error saving mhtml: {e}")
+            mhtml_file_path = None
+
+        return screenshot_path, mhtml_file_path, current_time
+
+    def send_login_attempt_failed_message(self):
+        screenshot_path, mhtml_file_path, current_time = self.capture_screenshot_and_mhtml_file()
+
+        self.send_message_callback(
+            {
+                "message": self.Messages.LOGIN_ATTEMPT_FAILED,
+                "mhtml_file_path": mhtml_file_path,
+                "screenshot_path": screenshot_path,
+            }
+        )
+
+    def send_screenshot_and_mhtml_file_message(self):
+        screenshot_path, mhtml_file_path, _ = self.capture_screenshot_and_mhtml_file()
+        self.send_message_callback(
+            {
+                "message": self.Messages.SAVE_SCREENSHOT_AND_MHTML_FILE,
+                "screenshot_path": screenshot_path,
+                "mhtml_file_path": mhtml_file_path,
+            }
+        )
+
+    def send_incorrect_password_message(self):
+        self.send_message_callback({"message": self.Messages.COULD_NOT_CONNECT_TO_MEETING})
+
+    def send_blocked_by_captcha_message(self):
+        self.send_message_callback(
+            {
+                "message": self.Messages.BLOCKED_BY_CAPTCHA,
+            }
+        )
+
+    def send_debug_screenshot_message(self, step, exception, inner_exception):
+        current_time = datetime.datetime.now()
+        timestamp = current_time.strftime("%Y%m%d_%H%M%S")
+        screenshot_path = f"/tmp/ui_element_not_found_{timestamp}.png"
+        try:
+            self.driver.save_screenshot(screenshot_path)
+        except Exception as e:
+            logger.warning(f"Error saving screenshot: {e}")
+            screenshot_path = None
+
+        mhtml_file_path = f"/tmp/page_snapshot_{timestamp}.mhtml"
+        try:
+            result = self.driver.execute_cdp_cmd("Page.captureSnapshot", {})
+            mhtml_bytes = result["data"]  # Extract the data from the response dictionary
+            with open(mhtml_file_path, "w", encoding="utf-8") as f:
+                f.write(mhtml_bytes)
+        except Exception as e:
+            logger.warning(f"Error saving mhtml: {e}")
+            mhtml_file_path = None
+
+        self.send_message_callback(
+            {
+                "message": self.Messages.UI_ELEMENT_NOT_FOUND,
+                "step": step,
+                "current_time": current_time,
+                "mhtml_file_path": mhtml_file_path,
+                "screenshot_path": screenshot_path,
+                "exception_type": exception.__class__.__name__ if exception else "exception_not_available",
+                "exception_message": exception.__str__() if exception else "exception_message_not_available",
+                "inner_exception_type": inner_exception.__class__.__name__ if inner_exception else "inner_exception_not_available",
+                "inner_exception_message": inner_exception.__str__() if inner_exception else "inner_exception_message_not_available",
+            }
+        )
+
+    def subclass_specific_domain_allowlist(self):
+        return []
+
+    def subclass_specific_chrome_policies(self):
+        return {}
+
+    def write_chrome_policies_file(self):
+        # Check if the /etc/.../attendee-chrome-policies.json symlink exists. If not, skip this, we are not running in the docker container.
+        if not os.path.islink("/etc/opt/chrome/policies/managed/attendee-chrome-policies.json"):
+            logger.warning("Attendee chrome policy file symlink does not exist, skipping writing chrome policies.")
+            return
+        policy = self.subclass_specific_chrome_policies()
+        with open("/tmp/attendee-chrome-policies.json", "w") as f:
+            json.dump(policy, f, indent=2)
+        logger.info("Chrome policy file written to /tmp/attendee-chrome-policies.json: %s", policy)
+
+    def add_subclass_specific_chrome_options(self, options):
+        pass
+
+    # By default, we want to disable GPU
+    def subclass_specific_use_disable_gpu_chrome_option(self):
+        return True
+
+    def room_sync_js_library_paths(self, current_dir):
+        if self.room_sync_source_participant_configuration:
+            if self.room_sync_source_participant_configuration.livekit:
+                return [
+                    os.path.join(current_dir, "js_libs", "livekit-client", "2.21.0", "livekit-client.umd.min.js"),
+                    os.path.join(current_dir, "js_libs", "livekit-client", "2.21.0", "livekit-client-adapter.js"),
+                ]
+        return []
+
+    def _descendant_pids(self, pid):
+        try:
+            out = subprocess.run(["ps", "-o", "pid=", "--ppid", str(pid)], capture_output=True, text=True, timeout=5).stdout
+        except Exception:
+            return []
+        pids = []
+        for child in [int(p) for p in out.split()]:
+            pids.extend(self._descendant_pids(child))
+            pids.append(child)
+        return pids
+
+    def default_graceful_driver_shutdown(self, driver):
+        try:
+            driver.close()
+        except Exception as e:
+            logger.warning(f"Error closing driver: {e}")
+        try:
+            driver.quit()
+        except Exception as e:
+            logger.warning(f"Error quitting driver: {e}")
+
+    def cleanup_graceful_driver_shutdown(self, driver):
+        self.log_browser_history(driver=driver)
+
+        # Simulate closing browser window
+        try:
+            self.subclass_specific_before_driver_close(driver)
+            driver.close()
+        except Exception as e:
+            logger.warning(f"Error closing driver: {e}")
+
+        # Then quit the driver
+        try:
+            driver.quit()
+        except Exception as e:
+            logger.warning(f"Error quitting driver: {e}")
+
+    def teardown_driver(self, *, graceful_shutdown_fn, graceful_timeout_seconds=30):
+        driver = self.driver
+        if not driver:
+            return
+
+        # Capture identifiers before quit() clears them
+        chromedriver_pid = getattr(getattr(driver.service, "process", None), "pid", None)
+        user_data_dir = None
+        try:
+            user_data_dir = driver.capabilities.get("chrome", {}).get("userDataDir")
+        except Exception:
+            pass
+
+        def run_graceful_shutdown():
+            try:
+                graceful_shutdown_fn(driver)
+            except Exception as e:
+                logger.warning(f"Error during graceful driver shutdown: {e}")
+
+        shutdown_thread = threading.Thread(target=run_graceful_shutdown, daemon=True)
+        shutdown_thread.start()
+        shutdown_thread.join(timeout=graceful_timeout_seconds)
+        if shutdown_thread.is_alive():
+            logger.warning(f"Graceful driver shutdown did not complete within {graceful_timeout_seconds}s, force killing browser processes")
+
+        # Unconditionally kill the chromedriver process tree (chrome is a descendant of chromedriver)
+        if chromedriver_pid:
+            for pid in self._descendant_pids(chromedriver_pid) + [chromedriver_pid]:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                except Exception as e:
+                    logger.warning(f"Error killing pid {pid}: {e}")
+            logger.info(f"Killed chromedriver pid {chromedriver_pid} and descendants")
+
+        # Belt and braces: catch any chrome processes that were reparented away from chromedriver
+        if user_data_dir:
+            try:
+                subprocess.run(["pkill", "-9", "-f", user_data_dir], timeout=5)
+            except Exception as e:
+                logger.warning(f"Error running pkill for {user_data_dir}: {e}")
+            logger.info(f"Killed processes with user_data_dir {user_data_dir}")
+
+    def init_driver(self):
+        self.write_chrome_policies_file()
+
+        options = webdriver.ChromeOptions()
+
+        options.add_argument("--autoplay-policy=no-user-gesture-required")
+        options.add_argument("--use-fake-device-for-media-stream")
+        options.add_argument("--use-fake-ui-for-media-stream")
+        options.add_argument(f"--window-size={self.video_frame_size[0]},{self.video_frame_size[1]}")
+        options.add_argument("--start-fullscreen")
+        # options.add_argument('--headless=new')
+        if self.subclass_specific_use_disable_gpu_chrome_option():
+            options.add_argument("--disable-gpu")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-application-cache")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+
+        if os.getenv("ENABLE_CHROME_SANDBOX", "false").lower() != "true":
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-setuid-sandbox")
+            logger.info("Chrome sandboxing is disabled")
+        else:
+            logger.info("Chrome sandboxing is enabled")
+
+        prefs = {
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False,
+        }
+        options.add_experimental_option("prefs", prefs)
+
+        if settings.MONITOR_DOMAIN_ALLOWLIST_IN_CHROME:
+            options.set_capability("webSocketUrl", True)
+
+        self.add_subclass_specific_chrome_options(options)
+
+        if self.driver:
+            self.teardown_driver(graceful_shutdown_fn=self.default_graceful_driver_shutdown)
+            self.driver = None
+
+        self.driver = webdriver.Chrome(options=options, service=Service(executable_path="/usr/local/bin/chromedriver"))
+        self.start_domain_allow_list_listener()
+        logger.info(f"web driver server initialized at port {self.driver.service.port}")
+
+        initial_data_code = f"window.initialData = {{websocketPort: {self.websocket_port}, videoFrameWidth: {self.video_frame_size[0]}, videoFrameHeight: {self.video_frame_size[1]}, botName: {json.dumps(self.display_name)}, addClickRipple: {'true' if self.should_create_debug_recording else 'false'}, recordingView: '{self.recording_view}', sendMixedAudio: {'true' if self.add_mixed_audio_chunk_callback else 'false'}, sendPerParticipantAudio: {'true' if self.add_audio_chunk_callback else 'false'}, perParticipantRealtimeVideoConfiguration: {json.dumps(self.per_participant_realtime_video_configuration.to_dict())}, roomSyncSourceParticipantConfiguration: {json.dumps(self.room_sync_source_participant_configuration.to_dict()) if self.room_sync_source_participant_configuration else 'null'}, sendPerParticipantVideo: {'true' if self.add_per_participant_video_frame_callback else 'false'}, collectCaptions: {'true' if self.upsert_caption_callback else 'false'}, recordParticipantSpeechStartStopEvents: {'true' if self.record_participant_speech_start_stop_events else 'false'}}}"
+
+        # Get directory of current file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Load JS libraries bundled in the repo (avoid runtime CDN fetches)
+        JS_LIBRARIES = [
+            os.path.join(current_dir, "js_libs", "protobufjs", "7.4.0", "protobuf.min.js"),
+            os.path.join(current_dir, "js_libs", "pako", "2.1.0", "pako.min.js"),
+            *self.room_sync_js_library_paths(current_dir),
+        ]
+
+        libraries_code = ""
+        for library_path in JS_LIBRARIES:
+            with open(library_path, "r") as library_file:
+                libraries_code += library_file.read() + "\n"
+            logger.info(f"Loaded library from {os.path.relpath(library_path, current_dir)}")
+
+        # Read the subclass payload files using paths relative to current file.
+        # Files are concatenated in order, so later files can depend on earlier ones.
+        payload_code = ""
+        for payload_file_name in self.get_chromedriver_payload_file_names():
+            with open(os.path.join(current_dir, "..", payload_file_name), "r") as file:
+                payload_code += file.read() + "\n"
+            logger.info(f"Loaded chromedriver payload from {payload_file_name}")
+
+        # Read shared_chromedriver_payload.js
+        with open(os.path.join(current_dir, "shared_chromedriver_payload.js"), "r") as file:
+            shared_chromedriver_payload_code = file.read()
+
+        # Combine them ensuring libraries load first
+        combined_code = f"""
+            {initial_data_code}
+            {self.subclass_specific_initial_data_code()}
+            {libraries_code}
+            {shared_chromedriver_payload_code}
+            {payload_code}
+        """
+
+        # Add the combined script to execute on new document
+        self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": combined_code})
+
+    def start_domain_allow_list_listener(self):
+        try:
+            self.start_domain_allow_list_listener_with_no_error_handling()
+        except Exception:
+            logger.exception("Error starting domain allow list listener")
+
+    def start_domain_allow_list_listener_with_no_error_handling(self):
+        if not settings.MONITOR_DOMAIN_ALLOWLIST_IN_CHROME:
+            return
+
+        socket = connect(
+            self.driver.capabilities["webSocketUrl"],
+            open_timeout=10,
+            close_timeout=2,
+            max_size=16 * 1024 * 1024,  # 16MB
+        )
+
+        def url_violates_allow_list(url):
+            try:
+                return self.url_violates_domain_allow_list(url)
+            except Exception:
+                logger.exception("Error checking allow list for failed navigation")
+                return None
+
+        def handle_message(message):
+            if message.get("method") == "browsingContext.navigationFailed" or message.get("method") == "browsingContext.navigationStarted":
+                params = message["params"]
+                url = params.get("url")
+                domain = self.domain_for_history_entry_url(url)
+                self.domains_seen_by_domain_allow_list_listener.add(domain)
+
+                if message.get("method") == "browsingContext.navigationFailed":
+                    self.domains_seen_by_domain_allow_list_listener_where_navigation_failed.add(domain)
+
+                violates_allow_list = url_violates_allow_list(url)
+                if violates_allow_list:
+                    self.domains_seen_by_domain_allow_list_listener_where_domain_was_not_in_allow_list.add(domain)
+
+                logger.warning(
+                    "%s: url=%s violates_domain_allow_list=%s",
+                    message.get("method"),
+                    mask_url_query_param_values(url),
+                    violates_allow_list,
+                )
+
+        try:
+            socket.send(
+                json.dumps(
+                    {
+                        "id": 1,
+                        "method": "session.subscribe",
+                        "params": {
+                            "events": [
+                                "browsingContext.navigationStarted",
+                                "browsingContext.navigationFailed",
+                            ],
+                        },
+                    }
+                )
+            )
+
+            # Confirm subscription before allowing the bot to navigate.
+            deadline = time.monotonic() + 10
+            while True:
+                message = json.loads(socket.recv(timeout=max(0, deadline - time.monotonic())))
+                if message.get("id") == 1:
+                    if message.get("type") != "success":
+                        raise RuntimeError(f"BiDi subscription failed: {message}")
+                    break
+                handle_message(message)
+        except Exception:
+            socket.close()
+            raise
+
+        def listen():
+            try:
+                for raw_message in socket:
+                    handle_message(json.loads(raw_message))
+            except ConnectionClosed:
+                # Chrome closes this socket on its way out, so there is nothing to recover from
+                logger.info("Domain allow list listener disconnected")
+            except Exception:
+                logger.exception("Domain allow list listener disconnected")
+
+        threading.Thread(
+            target=listen,
+            name="domain-allow-list-listener",
+            daemon=True,
+        ).start()
+
+    def init(self):
+        self.display_var_for_debug_recording = os.environ.get("DISPLAY")
+        if os.environ.get("DISPLAY") is None:
+            # Create virtual display only if no real display is available
+            self.display = Display(visible=0, size=(1930, 1090), use_xauth=True)
+            self.display.start()
+            self.display_var_for_debug_recording = self.display.new_display_var
+
+        if self.should_create_debug_recording:
+            self.debug_screen_recorder = DebugScreenRecorder(self.display_var_for_debug_recording, self.video_frame_size, BotAdapter.DEBUG_RECORDING_FILE_PATH)
+            self.debug_screen_recorder.start()
+
+        # Start websocket server in a separate thread
+        websocket_thread = threading.Thread(target=self.run_websocket_server, daemon=True)
+        websocket_thread.start()
+
+        self.wait_for_websocket_server_to_start()
+
+        repeatedly_attempt_to_join_meeting_thread = threading.Thread(target=self.repeatedly_attempt_to_join_meeting, daemon=True)
+        repeatedly_attempt_to_join_meeting_thread.start()
+
+    def wait_for_websocket_server_to_start(self, timeout_seconds=10):
+        deadline = time.time() + timeout_seconds
+        while not self.websocket_port and time.time() < deadline:
+            sleep(0.1)
+        if not self.websocket_port:
+            raise Exception(f"WebSocket server failed to start within {timeout_seconds} seconds")
+
+    def should_retry_joining_meeting_that_requires_login_by_logging_in(self):
+        return False
+
+    def repeatedly_attempt_to_join_meeting(self):
+        logger.info(f"Trying to join meeting at {self.meeting_url}")
+
+        # Expected exceptions are ones that we expect to happen and are not a big deal, so we only increment num_retries once every three expected exceptions
+        num_expected_exceptions = 0
+        num_retries = 0
+        max_retries = 3
+        authorized_user_not_in_meeting_first_seen_at = None
+
+        while num_retries <= max_retries:
+            try:
+                self.init_driver()
+                self.attempt_to_join_meeting()
+                logger.info("Successfully joined meeting")
+                break
+
+            except UiLoginRequiredException:
+                if not self.should_retry_joining_meeting_that_requires_login_by_logging_in():
+                    self.send_login_required_message()
+                    return
+
+            except UiLoginAttemptFailedException:
+                self.send_login_attempt_failed_message()
+                return
+
+            except UiRequestToJoinDeniedException:
+                self.send_request_to_join_denied_message()
+                return
+
+            except UiCouldNotJoinMeetingWaitingRoomTimeoutException:
+                self.send_message_callback({"message": self.Messages.LEAVE_MEETING_WAITING_ROOM_TIMEOUT_EXCEEDED})
+                return
+
+            except UiCouldNotJoinMeetingWaitingForHostException:
+                self.send_message_callback({"message": self.Messages.LEAVE_MEETING_WAITING_FOR_HOST})
+                return
+
+            except UiMeetingNotFoundException:
+                self.send_meeting_not_found_message()
+                return
+
+            except UiIncorrectPasswordException:
+                self.send_incorrect_password_message()
+                return
+
+            except UiBlockedByCaptchaException:
+                self.send_blocked_by_captcha_message()
+                return
+
+            except UiAuthorizedUserNotInMeetingTimeoutExceededException:
+                if authorized_user_not_in_meeting_first_seen_at is None:
+                    authorized_user_not_in_meeting_first_seen_at = time.time()
+
+                # If the timeout has exceeded, send the message. If not, we will retry again.
+                if time.time() - authorized_user_not_in_meeting_first_seen_at > self.automatic_leave_configuration.authorized_user_not_in_meeting_timeout_seconds:
+                    self.send_message_callback({"message": self.Messages.AUTHORIZED_USER_NOT_IN_MEETING_TIMEOUT_EXCEEDED})
+                    return
+                else:
+                    logger.info(f"Failed to join meeting and the UiAuthorizedUserNotInMeetingTimeoutExceededException exception has occurred but the timeout of {self.automatic_leave_configuration.authorized_user_not_in_meeting_timeout_seconds} seconds has not exceeded ({time.time() - authorized_user_not_in_meeting_first_seen_at:.1f} seconds elapsed), so retrying")
+
+            except UiInfinitelyRetryableException as e:
+                # Exceptions of this type will always be retried, it is up to the adapter to
+                # stop throwing this exception
+
+                if self.left_meeting or self.cleaned_up:
+                    logger.info(f"Failed to join meeting and the {e.__class__.__name__} exception is infinitely retryable but the bot has left the meeting or cleaned up, so returning")
+                    return
+
+                logger.warning(f"Failed to join meeting and the {e.__class__.__name__} exception is infinitely retryable so retrying")
+
+            except UiRetryableExpectedException as e:
+                if num_retries >= max_retries:
+                    logger.info(f"Failed to join meeting and the {e.__class__.__name__} exception is retryable but the number of retries exceeded the limit and there were {num_expected_exceptions} expected exceptions, so returning")
+                    self.send_debug_screenshot_message(step=e.step, exception=e, inner_exception=e.inner_exception)
+                    return
+
+                num_expected_exceptions += 1
+                if num_expected_exceptions % 5 == 0:
+                    num_retries += 1
+                    logger.info(f"Failed to join meeting and the {e.__class__.__name__} exception is expected and {num_expected_exceptions} expected exceptions have occurred, so incrementing num_retries. This usually indicates that the meeting has not started yet, so we will wait for the configured amount of time which is 180 seconds before retrying")
+                    # We're going to start a new pod to see if that fixes the issue
+                    self.send_message_callback({"message": self.Messages.BLOCKED_BY_PLATFORM_REPEATEDLY})
+                    return
+                else:
+                    logger.info(f"Failed to join meeting and the {e.__class__.__name__} exception is expected so not incrementing num_retries, but {num_expected_exceptions} expected exceptions have occurred")
+
+            except UiRetryableException as e:
+                if num_retries >= max_retries:
+                    logger.info(f"Failed to join meeting and the {e.__class__.__name__} exception is retryable but the number of retries exceeded the limit, so returning")
+                    self.send_debug_screenshot_message(step=e.step, exception=e, inner_exception=e.inner_exception)
+                    return
+
+                if self.left_meeting or self.cleaned_up:
+                    logger.info(f"Failed to join meeting and the {e.__class__.__name__} exception is retryable but the bot has left the meeting or cleaned up, so returning")
+                    return
+
+                logger.info(f"Failed to join meeting and the {e.__class__.__name__} exception is retryable so retrying")
+
+                num_retries += 1
+            except Exception as e:
+                if num_retries >= max_retries:
+                    logger.exception(f"Failed to join meeting and the unexpected {e.__class__.__name__} exception with message {e.__str__()} is retryable but the number of retries exceeded the limit, so returning.")
+                    self.send_debug_screenshot_message(step="unknown", exception=e, inner_exception=None)
+                    return
+
+                if self.left_meeting or self.cleaned_up:
+                    logger.exception(f"Failed to join meeting and the unexpected {e.__class__.__name__} exception with message {e.__str__()} is retryable but the bot has left the meeting or cleaned up, so returning.")
+                    return
+
+                logger.exception(f"Failed to join meeting and the unexpected {e.__class__.__name__} exception with message {e.__str__()} is retryable so retrying")
+
+                num_retries += 1
+
+            sleep(1)
+
+        self.after_bot_joined_meeting()
+        self.subclass_specific_after_bot_joined_meeting()
+
+    def after_bot_joined_meeting(self):
+        self.send_message_callback({"message": self.Messages.BOT_JOINED_MEETING})
+        self.joined_at = time.time()
+        self.update_only_one_participant_in_meeting_at()
+        self.stop_debug_screen_recording()
+
+    def after_bot_recording_permission_denied(self):
+        self.send_message_callback({"message": self.Messages.BOT_RECORDING_PERMISSION_DENIED, "denied_reason": BotAdapter.BOT_RECORDING_PERMISSION_DENIED_REASON.HOST_DENIED_PERMISSION})
+
+    def after_bot_can_record_meeting(self):
+        if self.recording_permission_granted_at is not None:
+            return
+
+        self.recording_permission_granted_at = time.time()
+        self.send_message_callback({"message": self.Messages.BOT_RECORDING_PERMISSION_GRANTED})
+        self.send_frames = True
+        self.driver.execute_script("window.ws?.enableMediaSending();")
+        self.first_buffer_timestamp_ms_offset = self.driver.execute_script("return performance.timeOrigin;")
+
+        if self.start_recording_screen_callback:
+            sleep(2)
+            self.start_recording_screen_callback(self.display_var_for_debug_recording)
+
+        self.media_sending_enable_timestamp_ms = time.time() * 1000
+
+    def stop_debug_screen_recording(self):
+        if self.debug_screen_recorder:
+            self.debug_screen_recorder.stop()
+
+    def leave(self):
+        if self.left_meeting:
+            return
+        if self.was_removed_from_meeting:
+            return
+        if self.stop_recording_screen_callback:
+            self.stop_recording_screen_callback()
+
+        # Save a screenshot and mhtml file of the page right before the bot leaves the meeting
+        screenshot_path_right_before_leave = None
+        mhtml_file_path_right_before_leave = None
+        try:
+            logger.info("disable media sending")
+            self.driver.execute_script("window.ws?.disableMediaSending();")
+
+            screenshot_path_right_before_leave, mhtml_file_path_right_before_leave, _ = self.capture_screenshot_and_mhtml_file()
+            self.click_leave_button()
+        except Exception as e:
+            logger.warning(f"Error during leave: {e}")
+        finally:
+            self.send_message_callback(
+                {
+                    "message": self.Messages.MEETING_ENDED,
+                    "mhtml_file_path": mhtml_file_path_right_before_leave,
+                    "screenshot_path": screenshot_path_right_before_leave,
+                }
+            )
+            self.left_meeting = True
+
+    def abort_join_attempt(self):
+        try:
+            self.driver.close()
+        except Exception as e:
+            logger.warning(f"Error closing driver: {e}")
+
+    def cleanup(self):
+        if self.stop_recording_screen_callback:
+            self.stop_recording_screen_callback()
+
+        try:
+            logger.info("disable media sending")
+            self.driver.execute_script("window.ws?.disableMediaSending();")
+        except Exception as e:
+            logger.warning(f"Error during media sending disable: {e}")
+
+        # Wait for websocket buffers to be processed
+        if self.last_websocket_message_processed_time:
+            time_when_shutdown_initiated = time.time()
+            while time.time() - self.last_websocket_message_processed_time < 2 and time.time() - time_when_shutdown_initiated < 30:
+                logger.info(f"Waiting until it's 2 seconds since last websockets message was processed or 30 seconds have passed. Currently it is {time.time() - self.last_websocket_message_processed_time} seconds and {time.time() - time_when_shutdown_initiated} seconds have passed")
+                sleep(0.5)
+
+        try:
+            if self.driver:
+                self.teardown_driver(graceful_shutdown_fn=self.cleanup_graceful_driver_shutdown)
+        except Exception as e:
+            logger.warning(f"Error during cleanup: {e}")
+
+        if self.debug_screen_recorder:
+            self.debug_screen_recorder.stop()
+
+        # Properly shutdown the websocket server
+        if self.websocket_server:
+            try:
+                self.websocket_server.shutdown()
+            except Exception as e:
+                logger.warning(f"Error shutting down websocket server: {e}")
+
+        self.cleaned_up = True
+
+    def domain_for_history_entry_url(self, url):
+        try:
+            return str(urlparse(url).netloc)
+        except Exception as e:
+            logger.warning(f"Error normalizing history entry url: {e}")
+            return url
+
+    def get_navigation_history_urls(self, *, driver):
+        if not driver:
+            return []
+        try:
+            nav_history = driver.execute_cdp_cmd("Page.getNavigationHistory", {})
+            nav_history_entries = nav_history.get("entries", [])
+            return [entry.get("url", "") for entry in nav_history_entries]
+        except Exception as e:
+            logger.warning(f"Error getting navigation history: {e}")
+            return []
+
+    def url_violates_domain_allow_list(self, url):
+        allowlist = self.subclass_specific_domain_allowlist()
+
+        if not url or not allowlist:
+            return False
+
+        parsed = urlparse(url)
+
+        # Only http(s) navigations are subject to the allow list.
+        if parsed.scheme not in ("http", "https"):
+            return False
+
+        host = (parsed.hostname or "").lower().rstrip(".")
+
+        if not host:
+            return False
+
+        for entry in allowlist:
+            allowed = str(entry).lower().strip()
+
+            exact_host_only = allowed.startswith(".")
+            allowed = allowed.lstrip(".").rstrip(".")
+
+            if not allowed:
+                continue
+
+            if allowed == "*" or host == allowed:
+                return False
+
+            if not exact_host_only and host.endswith("." + allowed):
+                return False
+
+        return True
+
+    def log_browser_history(self, *, driver):
+        try:
+            nav_history_urls = self.get_navigation_history_urls(driver=driver)
+            nav_history_hosts = list(set([self.domain_for_history_entry_url(url) for url in nav_history_urls]))
+            logger.info(f"Browser navigation history {nav_history_hosts}")
+
+            if not settings.MONITOR_DOMAIN_ALLOWLIST_IN_CHROME:
+                return
+
+            # Only covers top-level navigations
+            for url in nav_history_urls:
+                if self.url_violates_domain_allow_list(url):
+                    logger.error(f"Domain allow list violation detected after leave: {self.domain_for_history_entry_url(url)}")
+
+            # Includes all navigations
+            logger.info(f"Domains seen by domain allow list listener {list(self.domains_seen_by_domain_allow_list_listener)}")
+            if self.domains_seen_by_domain_allow_list_listener_where_navigation_failed:
+                logger.info(f"Domains seen by domain allow list listener where navigation failed {list(self.domains_seen_by_domain_allow_list_listener_where_navigation_failed)}")
+            if self.domains_seen_by_domain_allow_list_listener_where_domain_was_not_in_allow_list:
+                logger.info(f"Domains seen by domain allow list listener not in allow list {list(self.domains_seen_by_domain_allow_list_listener_where_domain_was_not_in_allow_list)}")
+        except Exception as e:
+            logger.warning(f"Error logging browser navigation history: {e}")
+
+    def top_level_page_is_blocked_by_chrome_policy(self, *, driver):
+        try:
+            result = driver.execute_cdp_cmd(
+                "Runtime.evaluate",
+                {
+                    "expression": """
+                        (() => {
+                            const data = window.loadTimeDataRaw;
+                            return data?.summary?.msg || null;
+                        })()
+                    """,
+                    "returnByValue": True,
+                },
+            )
+        except Exception:
+            logger.exception("Error in top_level_page_is_blocked_by_chrome_policy")
+            return False
+
+        return result.get("result", {}).get("value") == "Your organization doesn’t allow you to view this site"
+
+    def check_domain_allow_list_violation(self):
+        if not settings.ENFORCE_DOMAIN_ALLOWLIST_IN_CHROME:
+            return
+        if not self.driver:
+            return
+        if time.time() - self.last_domain_allow_list_violation_check_time < 30:
+            return
+
+        self.last_domain_allow_list_violation_check_time = time.time()
+
+        if self.top_level_page_is_blocked_by_chrome_policy(driver=self.driver):
+            url = self.driver.current_url
+            logger.error(f"Domain allow list violation detected: {url}")
+            raise Exception(f"Domain allow list violation detected: {self.domain_for_history_entry_url(url)}")
+
+    def check_auto_leave_conditions(self) -> None:
+        if self.left_meeting:
+            return
+        if self.cleaned_up:
+            return
+
+        self.check_domain_allow_list_violation()
+
+        if self.only_one_participant_in_meeting_at is not None:
+            if time.time() - self.only_one_participant_in_meeting_at > self.automatic_leave_configuration.only_participant_in_meeting_timeout_seconds:
+                logger.info(f"Auto-leaving meeting because there was only one participant in the meeting for {self.automatic_leave_configuration.only_participant_in_meeting_timeout_seconds} seconds")
+                self.send_message_callback({"message": self.Messages.ADAPTER_REQUESTED_BOT_LEAVE_MEETING, "leave_reason": BotAdapter.LEAVE_REASON.AUTO_LEAVE_ONLY_PARTICIPANT_IN_MEETING})
+                return
+
+        if not self.silence_detection_activated and self.joined_at is not None and time.time() - self.joined_at > self.automatic_leave_configuration.silence_activate_after_seconds:
+            self.silence_detection_activated = True
+            self.last_audio_message_processed_time = time.time()
+            logger.info(f"Silence detection activated after {self.automatic_leave_configuration.silence_activate_after_seconds} seconds")
+
+        if self.last_audio_message_processed_time is not None and self.silence_detection_activated:
+            if time.time() - self.last_audio_message_processed_time > self.automatic_leave_configuration.silence_timeout_seconds:
+                logger.info(f"Auto-leaving meeting because there was no audio for {self.automatic_leave_configuration.silence_timeout_seconds} seconds")
+                self.send_message_callback({"message": self.Messages.ADAPTER_REQUESTED_BOT_LEAVE_MEETING, "leave_reason": BotAdapter.LEAVE_REASON.AUTO_LEAVE_SILENCE})
+                return
+
+        if self.joined_at is not None and self.automatic_leave_configuration.max_uptime_seconds is not None:
+            if time.time() - self.joined_at > self.automatic_leave_configuration.max_uptime_seconds:
+                logger.info(f"Auto-leaving meeting because bot has been running for more than {self.automatic_leave_configuration.max_uptime_seconds} seconds")
+                self.send_message_callback({"message": self.Messages.ADAPTER_REQUESTED_BOT_LEAVE_MEETING, "leave_reason": BotAdapter.LEAVE_REASON.AUTO_LEAVE_MAX_UPTIME})
+                return
+
+    def is_ready_to_send_chat_messages(self):
+        return self.ready_to_send_chat_messages
+
+    def webpage_streamer_get_peer_connection_offer(self):
+        return self.driver.execute_script("return window.botOutputManager.getBotOutputPeerConnectionOffer();")
+
+    def webpage_streamer_start_peer_connection(self, offer_response):
+        self.driver.execute_script(f"window.botOutputManager.startBotOutputPeerConnection({json.dumps(offer_response)});")
+
+    def webpage_streamer_play_bot_output_media_stream(self, output_destination):
+        self.driver.execute_script(f"window.botOutputManager.playBotOutputMediaStream({json.dumps(output_destination)});")
+
+    def webpage_streamer_stop_bot_output_media_stream(self):
+        self.driver.execute_script("window.botOutputManager.stopBotOutputMediaStream();")
+
+    def is_bot_ready_for_webpage_streamer(self):
+        if not self.driver:
+            return False
+        return self.driver.execute_script("return window.botOutputManager?.isReadyForWebpageStreamer();")
+
+    def ready_to_show_bot_image(self):
+        self.send_message_callback({"message": self.Messages.READY_TO_SHOW_BOT_IMAGE})
+
+    def could_not_enable_closed_captions(self):
+        self.send_message_callback({"message": self.Messages.COULD_NOT_ENABLE_CLOSED_CAPTIONS})
+        # Leave meeting if configured to do so
+        if self.automatic_leave_configuration.enable_closed_captions_timeout_seconds is not None:
+            logger.info("Bot is configured to leave meeting if it could not enable closed captions, so leaving meeting")
+            self.send_message_callback({"message": self.Messages.ADAPTER_REQUESTED_BOT_LEAVE_MEETING, "leave_reason": BotAdapter.LEAVE_REASON.AUTO_LEAVE_COULD_NOT_ENABLE_CLOSED_CAPTIONS})
+
+    def get_first_buffer_timestamp_ms(self):
+        if self.media_sending_enable_timestamp_ms is None:
+            return None
+        # Doing a manual offset for now to correct for the screen recorder delay. This seems to work reliably.
+        return self.media_sending_enable_timestamp_ms
+
+    def send_raw_image(self, image_bytes):
+        # If we have a memoryview, convert it to bytes
+        if isinstance(image_bytes, memoryview):
+            image_bytes = image_bytes.tobytes()
+
+        # Pass the raw bytes directly to JavaScript
+        # The JavaScript side can convert it to appropriate format
+        self.driver.execute_script(
+            """
+            const bytes = new Uint8Array(arguments[0]);
+            window.botOutputManager.displayImage(bytes);
+        """,
+            list(image_bytes),
+        )
+
+    def send_raw_audio(self, bytes, sample_rate):
+        """
+        Sends raw audio bytes to the Google Meet call.
+
+        :param bytes: Raw audio bytes in PCM format
+        :param sample_rate: Sample rate of the audio in Hz
+        """
+        if not self.driver:
+            print("Cannot send audio - driver not initialized")
+            return
+
+        # Convert bytes to Int16Array for JavaScript
+        audio_data = np.frombuffer(bytes, dtype=np.int16).tolist()
+
+        # Call the JavaScript function to enqueue the PCM chunk
+        self.driver.execute_script("window.botOutputManager.playPCMAudio(arguments[0], arguments[1]);", audio_data, sample_rate)
+
+    def send_chat_message(self, text, to_user_uuid):
+        logger.info("send_chat_message not supported in web bots")
+
+    # Sub-classes can override this to add class-specific initial data code
+    def subclass_specific_initial_data_code(self):
+        return ""
+
+    # Sub-classes can override this to add class-specific after bot joined meeting code
+    def subclass_specific_after_bot_joined_meeting(self):
+        pass
+
+    # Sub-classes can override this to handle class-specific failed to join issues
+    def subclass_specific_handle_failed_to_join(self, reason):
+        pass
+
+    # Sub-classes can override this to add class-specific before driver close code
+    def subclass_specific_before_driver_close(self, driver):
+        pass

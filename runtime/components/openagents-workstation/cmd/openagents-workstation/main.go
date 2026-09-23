@@ -164,7 +164,16 @@ func run() error {
 		APISecret:           cfg.apiSecret,
 		RoomName:            cfg.roomName,
 		ParticipantIdentity: cfg.identity,
-	}, &lksdk.RoomCallback{})
+	}, &lksdk.RoomCallback{},
+		// The SDK's default 5s ICE connect timeout is too tight when this
+		// container reaches the server through Docker's host-networking
+		// hairpin path (host.docker.internal / TURN relay to the host's own
+		// LAN IP) instead of a normal host or STUN candidate pair — that
+		// path can complete but needs longer than 5s under load. This is
+		// generous, not a workaround for a specific broken path: it just
+		// gives slower-but-working candidate checks room to finish.
+		lksdk.WithConnectTimeout(20*time.Second),
+	)
 	if err != nil {
 		return fmt.Errorf("connect to room %q at %s: %w", cfg.roomName, cfg.openagentsURL, err)
 	}

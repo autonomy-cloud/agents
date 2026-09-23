@@ -180,3 +180,4 @@ docs/
 
 # Examples for development
 examples/dev/*
+.env.teams-bridge

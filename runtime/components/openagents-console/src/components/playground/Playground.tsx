@@ -194,6 +194,13 @@ export default function Playground({
   // empty list (server unreachable/misconfigured) just means no suggestions.
   const [activeRooms, setActiveRooms] = useState<RoomSummary[]>([]);
 
+  // "Invite the coworker to a Teams meeting" — see api/teams-join.ts and
+  // runtime/components/openagents-teams-bridge/ABSORBED.md.
+  const [teamsMeetingUrl, setTeamsMeetingUrl] = useState("");
+  const [teamsJoinStatus, setTeamsJoinStatus] = useState<
+    { kind: "idle" } | { kind: "pending" } | { kind: "error"; message: string } | { kind: "joined"; botId: string }
+  >({ kind: "idle" });
+
   // Live, currently-connected agent workers, fetched from /api/agents
   // (which itself reads openagents-server's /debug/agents endpoint) and
   // merged with config.settings.known_agents for the Agent name dropdown.
@@ -239,6 +246,40 @@ export default function Playground({
     session.start();
     setHasConnected(true);
   }, [session]);
+
+  const inviteToTeamsMeeting = useCallback(async () => {
+    if (!teamsMeetingUrl.trim() || connectionState !== ConnectionState.Connected) {
+      return;
+    }
+    setTeamsJoinStatus({ kind: "pending" });
+    try {
+      const response = await fetch("/api/teams-join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meetingUrl: teamsMeetingUrl.trim(),
+          roomName: session.room.name,
+          sourceIdentity: agent.internal.agentParticipant?.identity,
+        }),
+      });
+      const body = await response.json();
+      if (body.error) {
+        setTeamsJoinStatus({ kind: "error", message: body.error });
+        return;
+      }
+      setTeamsJoinStatus({ kind: "joined", botId: body.botId });
+    } catch {
+      setTeamsJoinStatus({
+        kind: "error",
+        message: "Could not reach the console's own server",
+      });
+    }
+  }, [
+    teamsMeetingUrl,
+    connectionState,
+    session.room.name,
+    agent.internal.agentParticipant?.identity,
+  ]);
 
   useEffect(() => {
     if (autoConnect && !hasConnected) {
@@ -703,6 +744,52 @@ export default function Playground({
                   : "gray-500"
               }
             />
+          </div>
+        </ConfigurationPanelItem>
+
+        <ConfigurationPanelItem title="Teams meeting">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-row items-center gap-1.5">
+              <input
+                className="w-full text-sm bg-gray-100/90 dark:bg-surface-2/70 border border-gray-200 dark:border-white/10 rounded-full px-3 py-1.5 text-gray-800 dark:text-gray-100 placeholder:text-gray-600 dark:placeholder:text-gray-500 focus:outline-none disabled:opacity-50"
+                placeholder="https://teams.microsoft.com/meet/..."
+                value={teamsMeetingUrl}
+                disabled={connectionState !== ConnectionState.Connected}
+                onChange={(e) => {
+                  setTeamsMeetingUrl(e.target.value);
+                  setTeamsJoinStatus({ kind: "idle" });
+                }}
+              />
+              <button
+                disabled={
+                  !teamsMeetingUrl.trim() ||
+                  connectionState !== ConnectionState.Connected ||
+                  teamsJoinStatus.kind === "pending"
+                }
+                onClick={inviteToTeamsMeeting}
+                className={`text-xs font-medium text-gray-950 bg-${config.settings.theme_color}-500 hover:bg-${config.settings.theme_color}-400 px-3.5 py-1.5 rounded-full transition-opacity whitespace-nowrap ${
+                  teamsMeetingUrl.trim() && connectionState === ConnectionState.Connected
+                    ? "opacity-100 pointer-events-auto"
+                    : "opacity-30 pointer-events-none"
+                }`}
+              >
+                {teamsJoinStatus.kind === "pending" ? "Inviting..." : "Invite"}
+              </button>
+            </div>
+            {connectionState !== ConnectionState.Connected && (
+              <div className="text-xs text-gray-500">
+                Connect to a session first — the coworker needs an active room to bridge into.
+              </div>
+            )}
+            {teamsJoinStatus.kind === "error" && (
+              <div className="text-xs text-red-500">{teamsJoinStatus.message}</div>
+            )}
+            {teamsJoinStatus.kind === "joined" && (
+              <div className={`text-xs text-${config.settings.theme_color}-500`}>
+                Requested — bot {teamsJoinStatus.botId}. The meeting organizer may need to
+                admit it from the lobby.
+              </div>
+            )}
           </div>
         </ConfigurationPanelItem>
 

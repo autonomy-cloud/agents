@@ -44,7 +44,34 @@ if [ ! -x "$SERVER_BIN" ]; then
   # today. Switch back to -mod=vendor once vendor/ is regenerated/fixed.
   (cd "$SERVER_DIR" && GOFLAGS=-mod=mod go build -o build/openagents-server ./cmd/server)
 fi
-"$SERVER_BIN" --dev --node-ip=127.0.0.1 &
+
+# --node-ip must be an address the workstation Docker container can actually
+# route back to for ICE/WebRTC media, not just one the host itself can reach.
+# 127.0.0.1 and Tailscale-only interface addresses (fd7a:.../fda9:...) fail
+# that: they're not reachable from inside Docker's bridge network, so the
+# workstation's media connection times out ("could not connect after
+# timeout") even though signaling and job dispatch work fine. The host's
+# real LAN IP is reachable both from same-host clients (browser, native
+# coworker) and from the Docker bridge, so detect that at start time instead
+# of hardcoding an address that would break on a different network/machine.
+detect_node_ip() {
+  if [ -n "${OPENAGENTS_NODE_IP:-}" ]; then
+    echo "$OPENAGENTS_NODE_IP"
+    return
+  fi
+  local iface
+  iface="$(route get 8.8.8.8 2>/dev/null | awk '/interface:/{print $2}')"
+  if [ -n "$iface" ]; then
+    ipconfig getifaddr "$iface" 2>/dev/null && return
+  fi
+  # Fallback for non-macOS / no default route yet.
+  ipconfig getifaddr en0 2>/dev/null && return
+  echo "127.0.0.1"
+}
+NODE_IP="$(detect_node_ip)"
+echo "    using node-ip $NODE_IP (set OPENAGENTS_NODE_IP to override)"
+
+"$SERVER_BIN" --dev --node-ip="$NODE_IP" &
 SERVER_PID=$!
 PIDS+=("$SERVER_PID")
 
@@ -87,10 +114,49 @@ else
   echo "     expected until a real internal OpenAI-compatible endpoint exists)"
 fi
 
+COMPOSE_PROFILE_ARGS=()
+if [ "${ENABLE_TEAMS_BRIDGE:-}" = "1" ]; then
+  echo "==> openagents-teams-bridge (opt-in: ENABLE_TEAMS_BRIDGE=1)"
+  # Generated once and persisted locally, not hardcoded — matches the
+  # cryptographic-key requirements of the vendored Django app (see
+  # runtime/components/openagents-teams-bridge/ABSORBED.md for provenance).
+  TEAMS_BRIDGE_ENV_FILE="$REPO_ROOT/.env.teams-bridge"
+  if [ ! -f "$TEAMS_BRIDGE_ENV_FILE" ]; then
+    echo "    generating $TEAMS_BRIDGE_ENV_FILE (first run only)..."
+    python3 - "$TEAMS_BRIDGE_ENV_FILE" <<'PYEOF'
+import secrets, sys
+from pathlib import Path
+try:
+    from cryptography.fernet import Fernet
+    fernet_key = Fernet.generate_key().decode()
+except ImportError:
+    # cryptography isn't necessarily installed on the host; the container's
+    # own image has it, and CREDENTIALS_ENCRYPTION_KEY just needs to be a
+    # 32-byte urlsafe-base64 value, which is exactly what Fernet keys are.
+    import base64, os
+    fernet_key = base64.urlsafe_b64encode(os.urandom(32)).decode()
+path = Path(sys.argv[1])
+path.write_text(
+    f"TEAMS_BRIDGE_DJANGO_SECRET_KEY={secrets.token_urlsafe(48)}\n"
+    f"TEAMS_BRIDGE_ENCRYPTION_KEY={fernet_key}\n"
+    f"TEAMS_BRIDGE_API_TOKEN={secrets.token_urlsafe(32)}\n"
+)
+PYEOF
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "$TEAMS_BRIDGE_ENV_FILE"
+  set +a
+  COMPOSE_PROFILE_ARGS+=(--profile teams)
+else
+  echo "==> openagents-teams-bridge: skipped (set ENABLE_TEAMS_BRIDGE=1 to build/start it —"
+  echo "    it's a heavy image: Chrome + Xvfb + gstreamer + its own Postgres/Redis)"
+fi
+
 echo "==> openagents-workstation (docker compose)"
 # The workstation container needs host.docker.internal, not 127.0.0.1 (that
 # would be the container's own loopback) — override explicitly here rather
 # than relying on the compose file's own default, since the OPENAGENTS_URL
 # exported above (for the native server/coworker processes) would otherwise
 # shadow it.
-(cd "$REPO_ROOT" && OPENAGENTS_URL="ws://host.docker.internal:7880" docker compose up --build)
+(cd "$REPO_ROOT" && OPENAGENTS_URL="ws://host.docker.internal:7880" docker compose "${COMPOSE_PROFILE_ARGS[@]}" up --build)
