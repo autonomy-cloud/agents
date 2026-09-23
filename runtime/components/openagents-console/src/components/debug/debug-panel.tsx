@@ -1,0 +1,581 @@
+import type {
+  WaveformHighlight,
+  WaveformMarker,
+} from "@/hooks/useStreamingWaveform";
+import { useWaveformClock } from "@/hooks/useStreamingWaveform";
+import type { OverlappingSpeechEvent } from "@/hooks/useRemoteSession";
+import type { UplinkLatency } from "@/hooks/useUplinkLatency";
+import {
+  type SessionEventType,
+  agentStateLabel,
+  timestampToSeconds,
+  userStateLabel,
+} from "@/lib/types";
+import { AgentSession } from "@livekit/protocol";
+import type { Track } from "livekit-client";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { AudioWaveform } from "./audio-waveform";
+import {
+  ALL_EVENT_TYPES,
+  DEFAULT_DISABLED_EVENT_TYPES,
+  EventLog,
+} from "./event-log";
+import { MetricsDisplay } from "./metrics-display";
+import { UsageDisplay } from "./usage-display";
+
+const DEFAULT_ENABLED_EVENT_TYPES = new Set<SessionEventType>(
+  ALL_EVENT_TYPES.filter((t) => !DEFAULT_DISABLED_EVENT_TYPES.has(t)),
+);
+
+type TabId = "waveform" | "events" | "metrics" | "usage";
+
+const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
+  { id: "waveform", label: "Waveform" },
+  { id: "events", label: "Events" },
+  { id: "metrics", label: "Metrics" },
+  { id: "usage", label: "Usage" },
+];
+
+const COLLAPSED_HEIGHT = 52;
+const MIN_HEIGHT = 120;
+const MAX_HEIGHT = 600;
+const DEFAULT_HEIGHT = 250;
+const TAB_ROW_CLASS = "flex items-end gap-4 self-stretch";
+const TAB_BUTTON_CLASS =
+  "h-full px-1 pb-2 -mb-px border-b-2 transition-colors text-sm flex items-end";
+const MAX_BADGE_COUNT = 999;
+/** Collapsed-state foreground. Defaults to Tailwind gray-500 to match PlaygroundTile titles. */
+const COLLAPSED_FG = "var(--lk-dbg-collapsed-fg, #6b7280)";
+
+const FONT_STACK =
+  'Inter, "Public Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+export type DebugPanelTrackLabels = {
+  user?: string;
+  agent?: string;
+};
+
+export type DebugPanelHighlightConfig = {
+  /** Label for interruption highlights. @default "Interruption" */
+  interruptionLabel?: string;
+  /** Label for backchannel highlights. @default "Backchannel" */
+  backchannelLabel?: string;
+  /** Color for interruption highlights. @default "#FA4C39" */
+  interruptionColor?: string;
+  /** Color for backchannel highlights. @default "#23DE6B" */
+  backchannelColor?: string;
+};
+
+export type DebugPanelTrackColors = {
+  /** Color for the agent waveform track. @default "#BA1FF9" */
+  agent?: string;
+  /** Color for the user waveform track. @default "#666666" */
+  user?: string;
+};
+
+export type DebugPanelProps = {
+  userTrack: Track | undefined;
+  agentTrack: Track | undefined;
+  events: AgentSession.AgentSessionEvent[];
+  overlappingSpeechEvents: OverlappingSpeechEvent[];
+  sessionUsage: AgentSession.AgentSessionUsage | null;
+  onClearEvents: () => void;
+  /** One-way server→client network transit in seconds, measured from event createdAt. */
+  networkLatency: number;
+  /** Measured uplink pipeline latency (client→SFU + SFU→agent + jitter buffer). */
+  uplinkLatency?: UplinkLatency;
+  /** Custom labels for waveform tracks. @default { user: "User", agent: "Agent" } */
+  trackLabels?: DebugPanelTrackLabels;
+  /** Custom colors for waveform tracks. */
+  trackColors?: DebugPanelTrackColors;
+  /** Custom labels and colors for interruption/backchannel highlights. */
+  highlightConfig?: DebugPanelHighlightConfig;
+};
+
+export function DebugPanel({
+  userTrack,
+  agentTrack,
+  events,
+  overlappingSpeechEvents,
+  sessionUsage,
+  onClearEvents,
+  networkLatency,
+  uplinkLatency,
+  trackLabels,
+  trackColors,
+  highlightConfig,
+}: DebugPanelProps) {
+  const [activeTab, setActiveTab] = useState<TabId>("waveform");
+  const [collapsed, setCollapsed] = useState(true);
+  const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const [waveformPaused, setWaveformPaused] = useState(false);
+  const waveformClock = useWaveformClock(waveformPaused);
+  const [enabledEventTypes, setEnabledEventTypes] = useState<
+    Set<SessionEventType>
+  >(() => new Set(DEFAULT_ENABLED_EVENT_TYPES));
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const tablistId = useId();
+
+  const userLabel = trackLabels?.user ?? "User";
+  const agentLabel = trackLabels?.agent ?? "Agent";
+  const interruptionColor = highlightConfig?.interruptionColor ?? "#FA4C39";
+  const backchannelColor = highlightConfig?.backchannelColor ?? "#23DE6B";
+  const interruptionLabel =
+    highlightConfig?.interruptionLabel ?? "Interruption";
+  const backchannelLabel = highlightConfig?.backchannelLabel ?? "Backchannel";
+  const agentStateColor = trackColors?.agent ?? "#BA1FF9";
+  const userStateColor = trackColors?.user ?? "#666666";
+
+  const highlights = useMemo<WaveformHighlight[]>(() => {
+    const pipeline = uplinkLatency?.total ?? 0;
+    const downlinkTransit = uplinkLatency?.transport ?? 0;
+    const clockOffset =
+      networkLatency > 0 ? networkLatency - downlinkTransit : 0;
+    const detectionCorrection = clockOffset - pipeline;
+
+    return overlappingSpeechEvents.map(
+      ({ speech: evt, detectedAtSeconds }) => {
+        const overlapStart = evt.overlapStartedAt
+          ? timestampToSeconds(evt.overlapStartedAt)
+          : detectedAtSeconds;
+        return {
+          start: overlapStart + clockOffset,
+          end: detectedAtSeconds + detectionCorrection,
+          color: evt.isInterruption ? interruptionColor : backchannelColor,
+          label: evt.isInterruption ? interruptionLabel : backchannelLabel,
+          sourceId: detectedAtSeconds,
+          snapToWaveform: true,
+        };
+      },
+    );
+  }, [
+    overlappingSpeechEvents,
+    networkLatency,
+    uplinkLatency,
+    interruptionColor,
+    backchannelColor,
+    interruptionLabel,
+    backchannelLabel,
+  ]);
+
+  const { userMarkers, agentMarkers } = useMemo(() => {
+    const pipeline = uplinkLatency?.total ?? 0;
+    const downlinkTransit = uplinkLatency?.transport ?? 0;
+    const clockOffset =
+      networkLatency > 0 ? networkLatency - downlinkTransit : 0;
+    const userCorrection = clockOffset - pipeline;
+    const agentCorrection = networkLatency > 0 ? networkLatency : 0;
+
+    const user: WaveformMarker[] = [];
+    const agent: WaveformMarker[] = [];
+    for (const evt of events) {
+      let oldLabel: string;
+      let newLabel: string;
+      let target: WaveformMarker[];
+      let color: string;
+      let correction: number;
+
+      if (evt.event.case === "agentStateChanged") {
+        const v = evt.event.value;
+        oldLabel = agentStateLabel(v.oldState);
+        newLabel = agentStateLabel(v.newState);
+        target = agent;
+        color = agentStateColor;
+        correction = agentCorrection;
+      } else if (evt.event.case === "userStateChanged") {
+        const v = evt.event.value;
+        oldLabel = userStateLabel(v.oldState);
+        newLabel = userStateLabel(v.newState);
+        target = user;
+        color = userStateColor;
+        correction = userCorrection;
+      } else {
+        continue;
+      }
+
+      const createdAt = timestampToSeconds(evt.createdAt);
+      const timestamp = createdAt + correction;
+
+      const pushMarker = (
+        kind: WaveformMarker["kind"],
+        snapToWaveform?: WaveformMarker["snapToWaveform"],
+      ) => {
+        target.push({
+          timestamp,
+          color,
+          label: newLabel,
+          kind,
+          sourceId: createdAt,
+          snapToWaveform,
+        });
+      };
+
+      if (oldLabel === "speaking") pushMarker("state-ended", "end");
+      if (newLabel === "speaking") pushMarker("state-started", "start");
+      if (
+        oldLabel !== "thinking" &&
+        newLabel !== "thinking" &&
+        oldLabel !== "speaking" &&
+        newLabel !== "speaking" &&
+        newLabel !== "listening"
+      ) {
+        pushMarker("state-changed");
+      }
+    }
+    return { userMarkers: user, agentMarkers: agent };
+  }, [events, networkLatency, uplinkLatency, userStateColor, agentStateColor]);
+
+  const onResizeStart = useCallback(
+    (e: ReactMouseEvent) => {
+      e.preventDefault();
+      dragRef.current = { startY: e.clientY, startHeight: height };
+
+      const onMouseMove = (me: MouseEvent) => {
+        if (!dragRef.current) return;
+        const delta = dragRef.current.startY - me.clientY;
+        const newHeight = Math.min(
+          MAX_HEIGHT,
+          Math.max(MIN_HEIGHT, dragRef.current.startHeight + delta),
+        );
+        setHeight(newHeight);
+      };
+
+      const onMouseUp = () => {
+        dragRef.current = null;
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      };
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    },
+    [height],
+  );
+
+  return (
+    <div
+      className="flex flex-col border-t shrink-0 w-full rounded-t-2xl overflow-hidden shadow-[0_-16px_32px_-16px_rgba(0,0,0,0.55)]"
+      style={{
+        height: collapsed ? COLLAPSED_HEIGHT : height,
+        background: "var(--lk-dbg-bg)",
+        borderColor: "var(--lk-dbg-border)",
+        fontFamily: FONT_STACK,
+      }}
+    >
+      {!collapsed && (
+        <div
+          onMouseDown={onResizeStart}
+          className="h-1 w-full cursor-ns-resize transition-colors shrink-0 hover:bg-[var(--lk-dbg-bg3)]"
+          style={{ background: "var(--lk-dbg-bg2)" }}
+        />
+      )}
+
+      <div
+        className={`flex items-center min-h-[48px] shrink-0 px-4 pt-2 pb-0 gap-1${collapsed ? "" : " border-b"}`}
+        style={{
+          borderColor: collapsed ? "transparent" : "var(--lk-dbg-border)",
+        }}
+      >
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="text-xs h-7 w-7 mr-1 rounded-md inline-flex items-center justify-center transition-colors hover:text-[var(--lk-dbg-fg)] hover:bg-[var(--lk-dbg-bg3)]"
+          style={{
+            color: collapsed ? COLLAPSED_FG : "var(--lk-dbg-fg5)",
+          }}
+          title={collapsed ? "Expand" : "Collapse"}
+        >
+          {collapsed ? (
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 10 10"
+              fill="currentColor"
+              aria-hidden
+            >
+              <path
+                d="M1 7L5 3l4 4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : (
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 10 10"
+              fill="currentColor"
+              aria-hidden
+            >
+              <path
+                d="M1 3l4 4 4-4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </button>
+        <div
+          className={TAB_ROW_CLASS}
+          role="tablist"
+          aria-label="Debug panel sections"
+        >
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const tabId = `${tablistId}-tab-${tab.id}`;
+            const panelId = `${tablistId}-panel-${tab.id}`;
+            return (
+              <button
+                key={tab.id}
+                id={tabId}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={panelId}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (collapsed) setCollapsed(false);
+                }}
+                className={TAB_BUTTON_CLASS}
+                style={{
+                  color: collapsed
+                    ? COLLAPSED_FG
+                    : isActive
+                      ? "var(--lk-dbg-fg)"
+                      : "var(--lk-dbg-fg5)",
+                  borderBottomColor:
+                    collapsed || !isActive
+                      ? "transparent"
+                      : "var(--lk-theme-color, var(--lk-dbg-fg))",
+                  fontWeight: collapsed ? 400 : isActive ? 600 : 400,
+                }}
+              >
+                {tab.label}
+                {tab.id === "events" && events.length > 0 && (
+                  <span
+                    className="ml-1 text-[10px] inline-block text-right"
+                    style={{
+                      minWidth: "2.4em",
+                      fontVariantNumeric: "tabular-nums",
+                      color: collapsed
+                        ? COLLAPSED_FG
+                        : isActive
+                          ? "var(--lk-dbg-fg3)"
+                          : "var(--lk-dbg-fg5)",
+                    }}
+                  >
+                    {events.length > MAX_BADGE_COUNT
+                      ? `${MAX_BADGE_COUNT}+`
+                      : events.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex-1" />
+        {(uplinkLatency?.total ?? 0) > 0 && (
+          <span
+            className="group relative inline-flex items-center gap-1 min-w-[66px] px-2 py-0.5 rounded text-[11px] font-mono tabular-nums shrink-0"
+            style={{
+              color: "var(--lk-dbg-fg5)",
+              background: "var(--lk-dbg-bg2)",
+            }}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden
+              style={{ color: "var(--lk-dbg-fg5)" }}
+            >
+              <path
+                d="M2 8h12"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+              <path
+                d="M10 4.5L13.5 8 10 11.5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {((uplinkLatency?.total ?? 0) * 1000).toFixed(0)}ms
+            {uplinkLatency && (
+              <div
+                className="pointer-events-none absolute bottom-full right-0 z-50 mb-1.5 hidden rounded px-2.5 py-2 text-[11px] whitespace-nowrap group-hover:block"
+                style={{
+                  background: "var(--lk-dbg-bg)",
+                  border: "1px solid var(--lk-dbg-border)",
+                  color: "var(--lk-dbg-fg3)",
+                }}
+              >
+                <div
+                  className="mb-1.5 font-semibold"
+                  style={{ color: "var(--lk-dbg-fg2)" }}
+                >
+                  Transport latency
+                </div>
+                <div
+                  className="grid gap-x-4 gap-y-0.5"
+                  style={{ gridTemplateColumns: "auto auto" }}
+                >
+                  <span style={{ color: "var(--lk-dbg-fg5)" }}>Encoding</span>
+                  <span className="text-right">
+                    {(uplinkLatency.encoding * 1000).toFixed(0)}ms
+                  </span>
+                  <span style={{ color: "var(--lk-dbg-fg5)" }}>Transport</span>
+                  <span className="text-right">
+                    {(uplinkLatency.transport * 1000).toFixed(0)}ms
+                  </span>
+                  <span style={{ color: "var(--lk-dbg-fg5)" }}>Jitter buf</span>
+                  <span className="text-right">
+                    {(uplinkLatency.jitterBuffer * 1000).toFixed(0)}ms
+                  </span>
+                  <span
+                    className="mt-1.5 border-t pt-1.5"
+                    style={{
+                      borderColor: "var(--lk-dbg-border)",
+                      color: "var(--lk-dbg-fg3)",
+                    }}
+                  >
+                    Total
+                  </span>
+                  <span
+                    className="mt-1.5 border-t pt-1.5 text-right"
+                    style={{ borderColor: "var(--lk-dbg-border)" }}
+                  >
+                    {(uplinkLatency.total * 1000).toFixed(0)}ms
+                  </span>
+                </div>
+              </div>
+            )}
+          </span>
+        )}
+      </div>
+
+      {!collapsed && (
+        <div className="flex-1 overflow-hidden">
+          <div
+            id={`${tablistId}-panel-waveform`}
+            role="tabpanel"
+            aria-labelledby={`${tablistId}-tab-waveform`}
+            className={
+              activeTab === "waveform"
+                ? "w-full h-full flex flex-col relative"
+                : "hidden"
+            }
+          >
+            <AudioWaveform
+              track={userTrack}
+              clock={waveformClock}
+              color={userStateColor}
+              label={userLabel}
+              tickPlacement="top"
+              highlights={highlights}
+              markers={userMarkers}
+            />
+            <AudioWaveform
+              track={agentTrack}
+              clock={waveformClock}
+              color={agentStateColor}
+              label={agentLabel}
+              tickPlacement="hidden"
+              markers={agentMarkers}
+            />
+            <button
+              onClick={() => {
+                setWaveformPaused((prev) => {
+                  if (prev) waveformClock.reset();
+                  return !prev;
+                });
+              }}
+              className="absolute bottom-2 right-2 h-6 w-6 rounded flex items-center justify-center transition-colors"
+              style={{
+                background: "var(--lk-dbg-bg3)",
+                color: "var(--lk-dbg-fg5)",
+              }}
+              title={waveformPaused ? "Resume (clears waveform)" : "Pause"}
+              aria-label={
+                waveformPaused
+                  ? "Resume waveform (clears waveform)"
+                  : "Pause waveform"
+              }
+            >
+              {waveformPaused ? (
+                <svg
+                  width="10"
+                  height="12"
+                  viewBox="0 0 10 12"
+                  fill="currentColor"
+                >
+                  <path d="M0 0l10 6-10 6z" />
+                </svg>
+              ) : (
+                <svg
+                  width="10"
+                  height="12"
+                  viewBox="0 0 10 12"
+                  fill="currentColor"
+                >
+                  <rect x="0" y="0" width="3" height="12" />
+                  <rect x="7" y="0" width="3" height="12" />
+                </svg>
+              )}
+            </button>
+          </div>
+          {activeTab === "events" && (
+            <div
+              id={`${tablistId}-panel-events`}
+              role="tabpanel"
+              aria-labelledby={`${tablistId}-tab-events`}
+              className="w-full h-full"
+            >
+              <EventLog
+                events={events}
+                enabledTypes={enabledEventTypes}
+                onEnabledTypesChange={setEnabledEventTypes}
+                onClear={onClearEvents}
+              />
+            </div>
+          )}
+          {activeTab === "metrics" && (
+            <div
+              id={`${tablistId}-panel-metrics`}
+              role="tabpanel"
+              aria-labelledby={`${tablistId}-tab-metrics`}
+              className="w-full h-full"
+            >
+              <MetricsDisplay events={events} />
+            </div>
+          )}
+          {activeTab === "usage" && (
+            <div
+              id={`${tablistId}-panel-usage`}
+              role="tabpanel"
+              aria-labelledby={`${tablistId}-tab-usage`}
+              className="w-full h-full"
+            >
+              <UsageDisplay sessionUsage={sessionUsage} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
