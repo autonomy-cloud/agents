@@ -54,3 +54,81 @@ not become user-facing configuration.
 - Rust builds use `cargo --offline` and an absorbed libwebrtc tree.
 - Python installation uses the checked-in wheelhouse and `--no-index`.
 - Every release includes hashes, an SBOM, and third-party license notices.
+
+## Local dev stack: server + coworker + workstation + console
+
+Four first-party components under `runtime/components/` build a complete,
+runnable "digital coworker" stack on top of the air-gapped core above (see
+`runtime/COMPONENTS.md` for exact upstream provenance of each):
+
+| Component | What it is |
+| --- | --- |
+| `openagents-server` | The LiveKit-compatible SFU/media server (Go) |
+| `openagents-coworker` | The Anika voice agent worker (Python, `openagents-core` + `openagents-plugins`) |
+| `openagents-workstation` | Gives the coworker a real Linux desktop it can share into a room (Go + Docker) |
+| `openagents-console` | Web UI for joining/testing coworker sessions (Next.js) |
+
+Unlike the core runtime above, these four have real, ordinary network
+dependencies at build time (Docker's `apt-get`, `uv`/`pnpm` package
+installs, `go build -mod=mod` for `openagents-server` — see the note below)
+— they are the demo/dev-facing product surface, not the air-gapped release
+artifact.
+
+### One command
+
+```bash
+export OPENAGENTS_OPENAI_BASE_URL=<your internal OpenAI-compatible endpoint>  # optional, see below
+./scripts/dev-up.sh
+```
+
+This builds (first run only) and starts `openagents-server` natively in
+`--dev` mode (`ws://127.0.0.1:7880`, `devkey`/`secret`), starts
+`openagents-coworker` natively via `uv run` if
+`OPENAGENTS_OPENAI_BASE_URL` is set (skipped with a clear message
+otherwise — job dispatch/registration works fine without it; only actual
+STT/LLM/TTS calls need a real endpoint), and brings up
+`openagents-workstation` via `docker compose`. Ctrl+C stops everything it
+started.
+
+Then, separately (kept out of `dev-up.sh` so it stays fast to iterate on):
+
+```bash
+cd runtime/components/openagents-console && pnpm install && pnpm dev
+```
+
+Defaults to the same `ws://127.0.0.1:7880` / `devkey` / `secret` the script
+brings up — open it, hit Connect, and (with `OPENAGENTS_OPENAI_BASE_URL`
+set) the coworker joins automatically via LiveKit job dispatch. Once
+connected, speaking into your mic both publishes real audio and — via the
+console's browser-side speech recognition — sends each finalized phrase as
+a text message, which reaches the agent through `openagents-core`'s
+existing `room_io` text-input handler (topic `lk.chat` →
+`session.generate_reply()`) with no STT model required; it shows up in the
+Chat panel like any other message.
+
+### Known environment gotchas (already worked around in `dev-up.sh`, documented here so they're not mistaken for new bugs)
+
+- **This checkout's path contains `:`** (`.../github.com:autonomy-cloud/`),
+  which breaks `uv` outright (`path segment contains separator ':'`) — see
+  `memory/colon-path-npx-workaround.md`. `dev-up.sh` runs the coworker's
+  `uv` commands from an rsync'd colon-free copy instead of the repo path
+  directly.
+- **`openagents-server`'s own `vendor/` tree is currently missing several
+  transitive Go packages** (a pre-existing gap), so `-mod=vendor` fails for
+  it specifically; `dev-up.sh` builds it with `-mod=mod` (network-resolved)
+  instead. `openagents-workstation`'s vendor tree is complete and still
+  builds with `-mod=vendor` normally.
+- **`openagents-workstation` and `openagents-coworker` must use distinct
+  default identities** (`anika-coworker-desktop` vs `anika-coworker`) —
+  LiveKit disconnects the earlier connection when a second one joins under
+  the same participant identity, so sharing one would make them evict each
+  other on a loop.
+- A macOS wheel-tag mismatch can break `uv`'s build of `openagents-rtc`'s
+  editable wheel on newer macOS versions; `dev-up.sh` sets
+  `MACOSX_DEPLOYMENT_TARGET=11.0` around that build as a workaround.
+- Real end-to-end WebRTC media (not just signaling) has been blocked in
+  some sandboxed/VPN-heavy environments during development (ICE never
+  completes) — this is host/network-specific, not a bug in any component
+  here. Signaling, worker registration/job-dispatch, and room state are all
+  independently verifiable via `openagents-server`'s dev-mode `/debug/rooms`
+  and `/debug/agents` endpoints even when media itself is blocked.
