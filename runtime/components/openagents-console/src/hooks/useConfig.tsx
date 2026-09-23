@@ -31,11 +31,25 @@ export type AppConfig = {
   agent_dispatch?: PartialMessage<RoomAgentDispatch>;
 };
 
+export type KnownAgent = {
+  name: string;
+  description?: string;
+};
+
 export type UserSettings = {
   editable: boolean;
   theme_color: string;
   chat: boolean;
   agent?: string;
+  // Statically configured list of agent names known to be deployed, offered
+  // as dropdown suggestions for explicit dispatch in the Settings panel.
+  // This is NOT live-discovered: there is no server API to enumerate
+  // registered agent workers, since agent names are only known at
+  // deploy/config time. Explicit dispatch is also optional — our own
+  // coworker currently accepts automatic dispatch into any room without an
+  // agent name set, so this list only matters once multiple named agents
+  // are deployed side by side.
+  known_agents?: KnownAgent[];
   inputs: {
     camera: boolean;
     screen: boolean;
@@ -58,6 +72,10 @@ const defaultConfig: AppConfig = {
     editable: true,
     theme_color: "cyan",
     chat: true,
+    // OPENAGENTS_AGENT_NAME convention: our coworker accepts automatic
+    // dispatch by default (no agent name required), so this is just a
+    // convenience default for explicit-dispatch setups.
+    known_agents: [{ name: "anika-coworker" }],
     inputs: {
       camera: true,
       screen: true,

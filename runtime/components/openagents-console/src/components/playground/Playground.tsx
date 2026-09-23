@@ -44,6 +44,8 @@ import { RoomAgentDispatch } from "livekit-server-sdk";
 import { QRCodeSVG } from "qrcode.react";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import tailwindTheme from "../../lib/tailwindTheme.preval";
+import type { RoomSummary } from "@/pages/api/rooms";
+import type { AgentSummary } from "@/pages/api/agents";
 import { RpcPanel } from "./RpcPanel";
 
 function EmptyState({
@@ -184,6 +186,17 @@ export default function Playground({
     { id: `attr_initial_${Date.now()}`, key: "", value: "" },
   ]);
 
+  // Currently active rooms on the server, fetched from /api/rooms, offered
+  // as dropdown suggestions in the Room name field so a user can rejoin an
+  // existing session instead of guessing its name. Best-effort only: an
+  // empty list (server unreachable/misconfigured) just means no suggestions.
+  const [activeRooms, setActiveRooms] = useState<RoomSummary[]>([]);
+
+  // Live, currently-connected agent workers, fetched from /api/agents
+  // (which itself reads openagents-server's /debug/agents endpoint) and
+  // merged with config.settings.known_agents for the Agent name dropdown.
+  const [liveAgents, setLiveAgents] = useState<AgentSummary[]>([]);
+
   const session = useSession(tokenSource, tokenFetchOptions);
   const { connectionState } = session;
   const agent = useAgent(session);
@@ -252,6 +265,74 @@ export default function Playground({
       clearEvents();
     }
   }, [connectionState, clearEvents]);
+
+  // Poll for currently active rooms while the Room name field is editable
+  // (i.e. not connected), so the dropdown suggestions stay reasonably fresh
+  // without needing a real-time subscription.
+  useEffect(() => {
+    if (connectionState === ConnectionState.Connected) {
+      return;
+    }
+    let cancelled = false;
+    const fetchRooms = () => {
+      fetch("/api/rooms")
+        .then((res) => res.json())
+        .then((data: { rooms?: RoomSummary[]; error?: string }) => {
+          if (cancelled) {
+            return;
+          }
+          if (data.error) {
+            console.warn("Could not list active rooms:", data.error);
+          }
+          setActiveRooms(data.rooms ?? []);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            console.warn("Could not list active rooms:", err);
+            setActiveRooms([]);
+          }
+        });
+    };
+    fetchRooms();
+    const interval = setInterval(fetchRooms, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [connectionState]);
+
+  // Same pattern as the room poll above, for live agent workers.
+  useEffect(() => {
+    if (connectionState === ConnectionState.Connected) {
+      return;
+    }
+    let cancelled = false;
+    const fetchAgents = () => {
+      fetch("/api/agents")
+        .then((res) => res.json())
+        .then((data: { agents?: AgentSummary[]; error?: string }) => {
+          if (cancelled) {
+            return;
+          }
+          if (data.error) {
+            console.warn("Could not list live agents:", data.error);
+          }
+          setLiveAgents(data.agents ?? []);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            console.warn("Could not list live agents:", err);
+            setLiveAgents([]);
+          }
+        });
+    };
+    fetchAgents();
+    const interval = setInterval(fetchAgents, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [connectionState]);
 
   const [showDebugPanel, setShowDebugPanel] = useState(false);
 
@@ -493,6 +574,27 @@ export default function Playground({
     participant: agent.internal.agentParticipant ?? undefined,
   });
 
+  // Live workers take precedence over a configured entry of the same name
+  // (its description is replaced with a live-status label), and any
+  // configured entry with no matching live worker is still offered so the
+  // field isn't empty just because nothing happens to be connected.
+  const mergedAgentOptions = useMemo(() => {
+    const liveByName = new Map(liveAgents.map((a) => [a.name, a]));
+    const configured = config.settings.known_agents ?? [];
+    const merged = configured.map((knownAgent) => {
+      const live = liveByName.get(knownAgent.name);
+      liveByName.delete(knownAgent.name);
+      return {
+        name: knownAgent.name,
+        description: live ? `live — ${live.status ?? "connected"}` : knownAgent.description,
+      };
+    });
+    for (const live of Array.from(liveByName.values())) {
+      merged.push({ name: live.name, description: `live — ${live.status ?? "connected"}` });
+    }
+    return merged;
+  }, [config.settings.known_agents, liveAgents]);
+
   const settingsTileContent = useMemo(() => {
     return (
       <div className="flex flex-col h-full w-full items-start overflow-y-auto">
@@ -521,7 +623,18 @@ export default function Playground({
               }}
               placeholder="Auto"
               editable={connectionState !== ConnectionState.Connected}
+              listId="active-room-options"
             />
+            {connectionState !== ConnectionState.Connected && (
+              <datalist id="active-room-options">
+                {activeRooms.map((room) => (
+                  <option key={room.name} value={room.name}>
+                    {room.numParticipants} participant
+                    {room.numParticipants === 1 ? "" : "s"}
+                  </option>
+                ))}
+              </datalist>
+            )}
             <NameValueRow
               name="Status"
               value={
@@ -555,7 +668,17 @@ export default function Playground({
               }}
               placeholder="None"
               editable={connectionState !== ConnectionState.Connected}
+              listId="known-agent-options"
             />
+            {connectionState !== ConnectionState.Connected && (
+              <datalist id="known-agent-options">
+                {mergedAgentOptions.map((agentOption) => (
+                  <option key={agentOption.name} value={agentOption.name}>
+                    {agentOption.description}
+                  </option>
+                ))}
+              </datalist>
+            )}
             <NameValueRow
               name="Identity"
               value={
@@ -759,6 +882,8 @@ export default function Playground({
     tokenFetchOptions,
     setTokenFetchOptions,
     userRoomName,
+    activeRooms,
+    mergedAgentOptions,
   ]);
 
   let mobileTabs: PlaygroundTab[] = [];
