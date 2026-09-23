@@ -47,11 +47,19 @@ func loadConfig() config {
 		apiKey:        getenv("OPENAGENTS_API_KEY", "devkey"),
 		apiSecret:     getenv("OPENAGENTS_API_SECRET", "secret"),
 		roomName:      getenv("ROOM_NAME", "coworker-standup"),
-		identity:      getenv("COWORKER_IDENTITY", "anika-coworker"),
-		runtimeDir:    getenv("PORTABLEDESKTOP_RUNTIME_DIR", "/opt/portabledesktop-runtime"),
-		geometry:      getenv("WORKSTATION_GEOMETRY", "1280x800"),
-		fps:           getenvInt("WORKSTATION_FPS", 15),
-		bitrateKbps:   getenvInt("WORKSTATION_BITRATE_KBPS", 2000),
+		// A distinct suffix from openagents-coworker's own default identity
+		// (anika-coworker) is deliberate: LiveKit disconnects the earlier
+		// connection when a second one joins under the same identity, so
+		// the voice agent and this desktop-only participant would fight
+		// over the same slot if they shared one. Console/extension UIs key
+		// the "AI coworker" badge off an identity *prefix* match, so both
+		// still read as the same coworker despite being separate
+		// participants.
+		identity:    getenv("COWORKER_IDENTITY", "anika-coworker-desktop"),
+		runtimeDir:  getenv("PORTABLEDESKTOP_RUNTIME_DIR", "/opt/portabledesktop-runtime"),
+		geometry:    getenv("WORKSTATION_GEOMETRY", "1280x800"),
+		fps:         getenvInt("WORKSTATION_FPS", 15),
+		bitrateKbps: getenvInt("WORKSTATION_BITRATE_KBPS", 2000),
 	}
 	return c
 }

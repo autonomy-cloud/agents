@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Boots the whole local coworker dev stack with one command:
 #   1. builds (if needed) and starts openagents-server natively, --dev mode
 #   2. starts openagents-coworker natively via `uv run`, if
@@ -59,9 +59,28 @@ done
 
 echo "==> openagents-coworker"
 if [ -n "${OPENAGENTS_OPENAI_BASE_URL:-}" ]; then
-  (cd "$COWORKER_DIR" && uv run --package openagents-coworker openagents-coworker dev) &
-  PIDS+=("$!")
-  echo "    starting (pid ${PIDS[-1]})"
+  # uv fails outright ("path segment contains separator ':'") when run
+  # inside a path containing ':' — this checkout lives under
+  # .../github.com:autonomy-cloud/. A symlink does NOT work around it (uv
+  # resolves realpath); see memory/colon-path-npx-workaround.md. Run uv
+  # from a colon-free rsync'd copy instead — rsync makes repeat runs fast
+  # by only copying diffs.
+  UV_COPY_DIR="${UV_COPY_DIR:-/tmp/openagents-agents-uv-copy}"
+  echo "    syncing to $UV_COPY_DIR (colon-free path uv can run in)..."
+  mkdir -p "$UV_COPY_DIR"
+  rsync -a --delete \
+    --exclude='.git' --exclude='.venv' --exclude='node_modules' \
+    --exclude='runtime/components/openagents-server' \
+    --exclude='runtime/components/openagents-workstation' \
+    --exclude='runtime/components/openagents-console' \
+    "$REPO_ROOT/" "$UV_COPY_DIR/"
+  # Works around a uv/wheel-tag mismatch on newer macOS versions when
+  # building openagents-rtc's editable wheel (a pre-existing packaging gap,
+  # not specific to this script) — harmless no-op on Linux.
+  (cd "$UV_COPY_DIR/runtime/components/openagents-coworker" && MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}" uv run --package openagents-coworker openagents-coworker dev) &
+  COWORKER_PID=$!
+  PIDS+=("$COWORKER_PID")
+  echo "    starting (pid $COWORKER_PID)"
 else
   echo "    skipped: OPENAGENTS_OPENAI_BASE_URL is not set."
   echo "    (see runtime/components/openagents-coworker/README.md — this is"

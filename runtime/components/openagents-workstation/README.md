@@ -85,7 +85,7 @@ docker run --rm \
   -e OPENAGENTS_API_KEY=devkey \
   -e OPENAGENTS_API_SECRET=secret \
   -e ROOM_NAME=coworker-standup \
-  -e COWORKER_IDENTITY=anika-coworker \
+  -e COWORKER_IDENTITY=anika-coworker-desktop \
   openagents-workstation
 ```
 
@@ -97,7 +97,7 @@ docker run --rm \
 | `OPENAGENTS_API_KEY` | `devkey` | API key |
 | `OPENAGENTS_API_SECRET` | `secret` | API secret |
 | `ROOM_NAME` | `coworker-standup` | Room to join |
-| `COWORKER_IDENTITY` | `anika-coworker` | Participant identity used when publishing |
+| `COWORKER_IDENTITY` | `anika-coworker-desktop` | Participant identity used when publishing |
 | `PORTABLEDESKTOP_RUNTIME_DIR` | `/opt/portabledesktop-runtime` | Directory containing `bin/Xvnc` |
 | `WORKSTATION_GEOMETRY` | `1280x800` | Xvnc desktop geometry |
 | `WORKSTATION_FPS` | `15` | Capture/encode frame rate |
